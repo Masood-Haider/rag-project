@@ -29,11 +29,18 @@ def health_check():
         "engine": "Groq + FAISS"
     }
 
+def _check_admin(password: Optional[str]) -> bool:
+    if not password or not settings.ADMIN_PASSWORD:
+        return False
+    expected = str(settings.ADMIN_PASSWORD).strip().strip('"').strip("'")
+    provided = str(password).strip().strip('"').strip("'")
+    return provided == expected
+
 @router.post("/admin/verify", response_model=AdminVerifyResponse)
 def verify_admin(req: AdminVerifyRequest):
-    if req.password.strip() == settings.ADMIN_PASSWORD:
+    if _check_admin(req.password):
         return AdminVerifyResponse(success=True, message="Admin authenticated successfully.")
-    return AdminVerifyResponse(success=False, message="Invalid admin password.")
+    return AdminVerifyResponse(success=False, message="Incorrect admin password.")
 
 @router.get("/stats", response_model=StatsResponse)
 def get_stats():
@@ -78,7 +85,7 @@ def list_documents(
     x_admin_password: Optional[str] = Header(None)
 ):
     docs_info: List[DocumentInfo] = []
-    is_admin = (x_admin_password == settings.ADMIN_PASSWORD)
+    is_admin = _check_admin(x_admin_password)
 
     # 1. Permanent documents
     if settings.CORPUS_DIR.exists():
@@ -126,7 +133,7 @@ async def upload_documents(
     """
     saved_files = []
     errors = []
-    is_admin = (admin_password == settings.ADMIN_PASSWORD)
+    is_admin = _check_admin(admin_password)
 
     if is_admin:
         # Permanent storage
@@ -186,7 +193,7 @@ def delete_document(
         return {"status": "success", "message": f"Deleted temporary file {filename} from your session."}
 
     # Permanent file deletion requires ADMIN_PASSWORD
-    if x_admin_password != settings.ADMIN_PASSWORD:
+    if not _check_admin(x_admin_password):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Permission denied. Only the administrator can delete permanent corpus documents."
