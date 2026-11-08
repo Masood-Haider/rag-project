@@ -85,6 +85,57 @@ def record_deleted_file(filename: str):
     except Exception:
         pass
 
+def unrecord_deleted_file(filename: str):
+    """Remove file from deleted tombstone so newly uploaded files with the same name are retained."""
+    settings.STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    tombstone_file = settings.STORAGE_DIR / "deleted_files.json"
+    deleted = get_deleted_files()
+    if filename in deleted:
+        deleted.remove(filename)
+        try:
+            with open(tombstone_file, "w", encoding="utf-8") as f:
+                json.dump(list(deleted), f)
+        except Exception:
+            pass
+
+def sync_corpus_from_github():
+    """Download corpus documents from GitHub repository if GITHUB_TOKEN is available."""
+    token = settings.GITHUB_TOKEN.strip()
+    repo = settings.GITHUB_REPO.strip()
+    branch = settings.GITHUB_BRANCH.strip()
+    if not token or not repo:
+        return
+
+    import requests
+    url = f"https://api.github.com/repos/{repo}/contents/backend/data/corpus?ref={branch}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "Nexus-RAG-App"
+    }
+
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            items = r.json()
+            if isinstance(items, list):
+                deleted_set = get_deleted_files()
+                for item in items:
+                    fname = item.get("name")
+                    if not fname or fname in {"README.md", ".gitkeep"} or fname in deleted_set or fname.startswith("."):
+                        continue
+                    dest = settings.CORPUS_DIR / fname
+                    if not dest.exists():
+                        download_url = item.get("download_url")
+                        if download_url:
+                            res_dl = requests.get(download_url, headers=headers, timeout=15)
+                            if res_dl.status_code == 200:
+                                with open(dest, "wb") as f:
+                                    f.write(res_dl.content)
+    except Exception as e:
+        print(f"Notice: GitHub sync failed ({e})")
+
 # Ensure directories exist and copy bundled files on Vercel
 try:
     settings.CORPUS_DIR.mkdir(parents=True, exist_ok=True)
@@ -99,5 +150,9 @@ try:
                 dest = settings.CORPUS_DIR / f.name
                 if not dest.exists():
                     shutil.copy2(f, dest)
+
+    # Sync any updated files from GitHub if GITHUB_TOKEN is active
+    if settings.GITHUB_TOKEN:
+        sync_corpus_from_github()
 except Exception as e:
     print(f"Directory initialization notice: {e}")

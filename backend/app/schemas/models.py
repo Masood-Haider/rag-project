@@ -68,6 +68,8 @@ class StatsResponse(BaseModel):
     default_k: int = 5
     faiss_available: bool
     groq_configured: bool
+    github_sync_configured: bool = False
+    github_repo: Optional[str] = "Masood-Haider/rag-project"
 
 class ConfigUpdateRequest(BaseModel):
     groq_model: Optional[str] = None
@@ -76,6 +78,7 @@ class ConfigUpdateRequest(BaseModel):
     chunk_overlap: Optional[int] = None
     k: Optional[int] = None
     session_id: Optional[str] = None
+    github_token: Optional[str] = None
 
 class AdminVerifyRequest(BaseModel):
     password: str

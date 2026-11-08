@@ -13,7 +13,8 @@ export default function DocumentManager({
   isAdmin,
   setIsAdmin,
   adminPassword,
-  setAdminPassword
+  setAdminPassword,
+  stats
 }) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState(null);
@@ -147,6 +148,13 @@ export default function DocumentManager({
 
   const handleFileUpload = async (files) => {
     if (!files || files.length === 0) return;
+
+    if (isAdmin && !adminPassword) {
+      setShowPasswordDialog(true);
+      setPasswordError('Please re-enter your admin password to upload permanent documents.');
+      return;
+    }
+
     setIsUploading(true);
     setUploadMessage(null);
 
@@ -161,8 +169,17 @@ export default function DocumentManager({
     }
 
     try {
+      const headers = {};
+      if (isAdmin && adminPassword) {
+        headers['x-admin-password'] = adminPassword;
+      }
+      if (sessionId) {
+        headers['x-session-id'] = sessionId;
+      }
+
       const res = await fetch(`${apiUrl}/upload`, {
         method: 'POST',
+        headers,
         body: formData,
       });
 
@@ -178,10 +195,10 @@ export default function DocumentManager({
 
       const data = await res.json();
       setUploadMessage({
-        type: 'success',
-        text: data.message || `Uploaded ${data.uploaded_files.length} document(s).`
+        type: data.status === 'success' ? 'success' : 'warning',
+        text: data.message || `Uploaded ${data.uploaded_files?.length || 0} document(s).`
       });
-      onRefreshDocs();
+      await onRefreshDocs();
     } catch (err) {
       setUploadMessage({
         type: 'error',
@@ -308,9 +325,19 @@ export default function DocumentManager({
             )}
           </div>
           <p className="text-xs text-zinc-500 mt-0.5">
-            {isAdmin
-              ? 'Admin Mode active. Any document uploaded will be stored permanently in the database.'
-              : 'Guest Mode active. Uploaded files are private to you and will be deleted when you leave.'}
+            {isAdmin ? (
+              stats?.github_sync_configured ? (
+                <span>
+                  Admin Mode active. Documents are stored permanently and auto-synced to GitHub (<code className="font-mono text-emerald-600 dark:text-emerald-400">{stats?.github_repo || 'Masood-Haider/rag-project'}</code>).
+                </span>
+              ) : (
+                <span>
+                  Admin Mode active. Documents are stored permanently. <span className="text-amber-600 dark:text-amber-400">(GitHub auto-sync: GITHUB_TOKEN not configured in Settings).</span>
+                </span>
+              )
+            ) : (
+              'Guest Mode active. Uploaded files are private to you and will be deleted when you leave.'
+            )}
           </p>
         </div>
 

@@ -15,17 +15,20 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Admin authentication state (persisted across page refreshes in sessionStorage)
-  const [isAdmin, setIsAdmin] = useState(() => {
-    return sessionStorage.getItem('nexus_is_admin') === 'true';
-  });
   const [adminPassword, setAdminPassword] = useState(() => {
     return sessionStorage.getItem('nexus_admin_pw') || '';
+  });
+  const [isAdmin, setIsAdmin] = useState(() => {
+    const hasAdmin = sessionStorage.getItem('nexus_is_admin') === 'true';
+    const pw = sessionStorage.getItem('nexus_admin_pw');
+    return hasAdmin && !!pw;
   });
 
   const handleSetIsAdmin = (val) => {
     setIsAdmin(val);
     sessionStorage.setItem('nexus_is_admin', val ? 'true' : 'false');
     if (!val) {
+      setAdminPassword('');
       sessionStorage.removeItem('nexus_admin_pw');
     }
   };
@@ -198,6 +201,7 @@ export default function App() {
             setIsAdmin={handleSetIsAdmin}
             adminPassword={adminPassword}
             setAdminPassword={handleSetAdminPassword}
+            stats={stats}
           />
         )}
       </main>
@@ -211,6 +215,7 @@ export default function App() {
         isAdmin={isAdmin}
         adminPassword={adminPassword}
         sessionId={sessionId}
+        stats={stats}
         onReindexComplete={async () => {
           await fetchStats();
           await fetchDocuments();

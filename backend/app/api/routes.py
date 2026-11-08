@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, UploadFile, File, Header, Form, HTTPException, status
 
-from ..config import settings, record_deleted_file
+from ..config import settings, record_deleted_file, unrecord_deleted_file, sync_corpus_from_github
 from ..schemas.models import (
     QueryRequest, QueryResponse,
     ReindexRequest, ReindexResponse,
@@ -41,7 +41,7 @@ def _commit_to_github_repo(filename: str, content_bytes: bytes) -> tuple[bool, s
     repo = settings.GITHUB_REPO.strip()
     branch = settings.GITHUB_BRANCH.strip()
     if not token or not repo:
-        return False, "GITHUB_TOKEN not set"
+        return False, "GITHUB_TOKEN not configured"
 
     import base64
     import requests
@@ -50,12 +50,13 @@ def _commit_to_github_repo(filename: str, content_bytes: bytes) -> tuple[bool, s
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28"
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "Nexus-RAG-Engine"
     }
 
     sha = None
     try:
-        r_get = requests.get(url, headers=headers, timeout=10)
+        r_get = requests.get(f"{url}?ref={branch}", headers=headers, timeout=10)
         if r_get.status_code == 200:
             sha = r_get.json().get("sha")
     except Exception as e:
@@ -74,7 +75,14 @@ def _commit_to_github_repo(filename: str, content_bytes: bytes) -> tuple[bool, s
         r_put = requests.put(url, headers=headers, json=payload, timeout=15)
         if r_put.status_code in (200, 201):
             return True, f"Committed to GitHub ({repo}@{branch})"
-        return False, f"GitHub error ({r_put.status_code})"
+
+        err_msg = f"HTTP {r_put.status_code}"
+        try:
+            gh_err = r_put.json()
+            err_msg = gh_err.get("message", err_msg)
+        except Exception:
+            err_msg = r_put.text[:120]
+        return False, f"GitHub sync error: {err_msg}"
     except Exception as e:
         return False, f"GitHub commit error: {e}"
 
@@ -83,7 +91,7 @@ def _delete_from_github_repo(filename: str) -> tuple[bool, str]:
     repo = settings.GITHUB_REPO.strip()
     branch = settings.GITHUB_BRANCH.strip()
     if not token or not repo:
-        return False, "GITHUB_TOKEN not set"
+        return False, "GITHUB_TOKEN not configured"
 
     import requests
 
@@ -91,11 +99,12 @@ def _delete_from_github_repo(filename: str) -> tuple[bool, str]:
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28"
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "Nexus-RAG-Engine"
     }
 
     try:
-        r_get = requests.get(url, headers=headers, timeout=10)
+        r_get = requests.get(f"{url}?ref={branch}", headers=headers, timeout=10)
         if r_get.status_code == 200:
             sha = r_get.json().get("sha")
             payload = {
@@ -150,7 +159,9 @@ def get_stats(
         chunk_overlap=chunk_overlap,
         default_k=default_k,
         faiss_available=vector_store.is_faiss_available,
-        groq_configured=bool(settings.GROQ_API_KEY)
+        groq_configured=bool(settings.GROQ_API_KEY),
+        github_sync_configured=bool(settings.GITHUB_TOKEN),
+        github_repo=settings.GITHUB_REPO
     )
 
 @router.post("/query", response_model=QueryResponse)
@@ -220,40 +231,70 @@ def list_documents(
 async def upload_documents(
     files: List[UploadFile] = File(...),
     admin_password: Optional[str] = Form(None),
-    session_id: Optional[str] = Form(None)
+    x_admin_password: Optional[str] = Header(None),
+    session_id: Optional[str] = Form(None),
+    x_session_id: Optional[str] = Header(None)
 ):
     """
     Upload endpoint:
-    - If admin_password matches settings.ADMIN_PASSWORD: save permanently to corpus.
+    - If admin_password matches settings.ADMIN_PASSWORD: save permanently to corpus, index globally, and sync to GitHub.
     - Otherwise: save into isolated temporary session for this visitor only.
     """
     saved_files = []
     errors = []
-    is_admin = _check_admin(admin_password)
+    actual_admin_pw = admin_password or x_admin_password
+    is_admin = _check_admin(actual_admin_pw)
+    actual_session_id = session_id or x_session_id
 
     if is_admin:
         # Permanent storage
         target_dir = settings.CORPUS_DIR
+        target_dir.mkdir(parents=True, exist_ok=True)
         github_sync = []
+
         for file in files:
             try:
                 dest = target_dir / file.filename
-                content_bytes = file.file.read()
+                content_bytes = await file.read()
                 with open(dest, "wb") as buffer:
                     buffer.write(content_bytes)
                 saved_files.append(file.filename)
 
-                # Direct sync to GitHub repository if GITHUB_TOKEN is set
+                # Clear tombstone blacklist so file is recognized
+                unrecord_deleted_file(file.filename)
+
+                # Also save to bundled corpus directory if writable
+                if settings.BUNDLED_CORPUS_DIR.exists():
+                    try:
+                        bundled_dest = settings.BUNDLED_CORPUS_DIR / file.filename
+                        with open(bundled_dest, "wb") as buffer:
+                            buffer.write(content_bytes)
+                    except Exception:
+                        pass
+
+                # Direct sync to GitHub repository
                 if settings.GITHUB_TOKEN:
                     gh_ok, gh_msg = _commit_to_github_repo(file.filename, content_bytes)
                     github_sync.append({"file": file.filename, "synced": gh_ok, "details": gh_msg})
+                else:
+                    github_sync.append({
+                        "file": file.filename,
+                        "synced": False,
+                        "details": "GITHUB_TOKEN not configured in server environment."
+                    })
             except Exception as e:
                 errors.append({"file": file.filename, "error": str(e)})
 
         reindex_result = rag_engine.reindex_all()
-        msg = f"Admin: Added {len(saved_files)} file(s) permanently."
+        chunks_indexed = reindex_result.get("total_chunks", 0)
+
+        msg = f"Admin: Added {len(saved_files)} file(s) permanently and indexed {chunks_indexed} chunk(s)."
         if github_sync:
-            msg += f" Synced {len([s for s in github_sync if s['synced']])} file(s) to GitHub repo."
+            synced_count = len([s for s in github_sync if s.get("synced")])
+            if synced_count > 0:
+                msg += f" Synced {synced_count} file(s) to GitHub repository ({settings.GITHUB_REPO}@{settings.GITHUB_BRANCH})."
+            else:
+                msg += f" Note: GitHub commit skipped ({github_sync[0]['details']})."
 
         return {
             "status": "success",
@@ -266,24 +307,25 @@ async def upload_documents(
         }
     else:
         # Temporary guest session storage
-        if not session_id:
-            session_id = datetime.datetime.now().strftime("guest_%Y%m%d_%H%M%S")
+        if not actual_session_id:
+            actual_session_id = datetime.datetime.now().strftime("guest_%Y%m%d_%H%M%S")
 
-        corpus_dir = session_manager.get_session_corpus_dir(session_id)
+        corpus_dir = session_manager.get_session_corpus_dir(actual_session_id)
         for file in files:
             try:
                 dest = corpus_dir / file.filename
+                content_bytes = await file.read()
                 with open(dest, "wb") as buffer:
-                    shutil.copyfileobj(file.file, buffer)
+                    buffer.write(content_bytes)
                 saved_files.append(file.filename)
             except Exception as e:
                 errors.append({"file": file.filename, "error": str(e)})
 
-        session_reindex = session_manager.reindex_session(session_id)
+        session_reindex = session_manager.reindex_session(actual_session_id)
         return {
             "status": "success",
             "is_permanent": False,
-            "session_id": session_id,
+            "session_id": actual_session_id,
             "uploaded_files": saved_files,
             "errors": errors,
             "reindex_result": session_reindex,
@@ -394,6 +436,9 @@ def update_settings(
             settings.DEFAULT_CHUNK_OVERLAP = req.chunk_overlap
         if req.k is not None:
             settings.DEFAULT_K = req.k
+        if req.github_token is not None:
+            settings.GITHUB_TOKEN = req.github_token.strip()
+            sync_corpus_from_github()
 
         # Auto rebuild permanent index with new chunk parameters
         reindex_res = rag_engine.reindex_all(
@@ -409,6 +454,7 @@ def update_settings(
             "chunk_size": settings.DEFAULT_CHUNK_SIZE,
             "chunk_overlap": settings.DEFAULT_CHUNK_OVERLAP,
             "default_k": settings.DEFAULT_K,
+            "github_sync_configured": bool(settings.GITHUB_TOKEN),
             "reindex_result": reindex_res,
             "message": "Permanent admin defaults saved. Knowledge base index rebuilt successfully."
         }
