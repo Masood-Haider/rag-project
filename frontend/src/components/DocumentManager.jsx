@@ -579,7 +579,7 @@ export default function DocumentManager({
                   type="password"
                   value={deletePassword}
                   onChange={(e) => setDeletePassword(e.target.value)}
-                  placeholder="Enter admin password (e.g. 1112)"
+                  placeholder="Enter admin password"
                   className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md px-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-400"
                 />
               </div>

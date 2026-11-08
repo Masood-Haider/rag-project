@@ -34,8 +34,8 @@ class Settings:
         STORAGE_DIR: Path = Path(os.getenv("STORAGE_DIR", BACKEND_DIR / "data" / "storage"))
         SESSIONS_DIR: Path = Path(os.getenv("SESSIONS_DIR", BACKEND_DIR / "data" / "sessions"))
 
-    # Admin Access Password (hardcoded fallback or env)
-    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "1112")
+    # Admin Access Password (strictly from env)
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "")
 
     # GitHub Direct Sync (Auto-commits admin file uploads directly to GitHub repo)
     GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
