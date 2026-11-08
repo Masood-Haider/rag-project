@@ -62,12 +62,8 @@ export default function Navbar({
           </button>
         </nav>
 
-        {/* Right Actions: System Indicator, Theme Toggle, Settings */}
+        {/* Right Actions: Theme Toggle, Settings */}
         <div className="flex items-center gap-2">
-          {/* Index Counter */}
-          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-md bg-zinc-100/70 dark:bg-zinc-900/70 border border-zinc-200/60 dark:border-zinc-800/80 text-[11px] text-zinc-600 dark:text-zinc-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-          </div>
 
           {/* Theme Toggle (Light / Dark) */}
           <button
