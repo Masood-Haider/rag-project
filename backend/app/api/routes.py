@@ -2,19 +2,21 @@ import os
 import shutil
 import datetime
 from pathlib import Path
-from typing import List
-from fastapi import APIRouter, UploadFile, File, HTTPException, status
+from typing import List, Optional
+from fastapi import APIRouter, UploadFile, File, Header, Form, HTTPException, status
 
 from ..config import settings
 from ..schemas.models import (
     QueryRequest, QueryResponse,
     ReindexRequest, ReindexResponse,
     DocumentListResponse, DocumentInfo,
-    StatsResponse, ConfigUpdateRequest
+    StatsResponse, ConfigUpdateRequest,
+    AdminVerifyRequest, AdminVerifyResponse
 )
 from ..core.rag_engine import rag_engine
 from ..core.vector_store import vector_store
 from ..core.document_loader import load_corpus
+from ..core.session_manager import session_manager
 
 router = APIRouter()
 
@@ -26,6 +28,12 @@ def health_check():
         "version": settings.VERSION,
         "engine": "Groq + FAISS"
     }
+
+@router.post("/admin/verify", response_model=AdminVerifyResponse)
+def verify_admin(req: AdminVerifyRequest):
+    if req.password.strip() == settings.ADMIN_PASSWORD:
+        return AdminVerifyResponse(success=True, message="Admin authenticated successfully.")
+    return AdminVerifyResponse(success=False, message="Invalid admin password.")
 
 @router.get("/stats", response_model=StatsResponse)
 def get_stats():
@@ -51,7 +59,7 @@ def query_rag(req: QueryRequest):
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No documents have been indexed yet. Please upload files to the knowledge base first."
+                detail="No documents have been indexed yet."
             )
 
     result = rag_engine.query(
@@ -59,13 +67,20 @@ def query_rag(req: QueryRequest):
         k=req.k,
         use_hybrid=req.use_hybrid,
         compare_plain=req.compare_plain,
-        model_name=req.model_name
+        model_name=req.model_name,
+        session_id=req.session_id
     )
     return result
 
 @router.get("/documents", response_model=DocumentListResponse)
-def list_documents():
+def list_documents(
+    x_session_id: Optional[str] = Header(None),
+    x_admin_password: Optional[str] = Header(None)
+):
     docs_info: List[DocumentInfo] = []
+    is_admin = (x_admin_password == settings.ADMIN_PASSWORD)
+
+    # 1. Permanent documents
     if settings.CORPUS_DIR.exists():
         for p in sorted(settings.CORPUS_DIR.iterdir()):
             if p.is_file() and p.name not in {"README.md", ".gitkeep"}:
@@ -75,42 +90,108 @@ def list_documents():
                     filename=p.name,
                     char_count=stat.st_size,
                     size_kb=round(stat.st_size / 1024, 2),
-                    last_modified=mod_time
+                    last_modified=mod_time,
+                    is_permanent=True
                 ))
+
+    # 2. Guest private temporary documents (only visible to this guest session)
+    if x_session_id:
+        session_docs = session_manager.list_session_documents(x_session_id)
+        for d in session_docs:
+            docs_info.append(DocumentInfo(
+                filename=d["filename"],
+                char_count=d["char_count"],
+                size_kb=d["size_kb"],
+                last_modified=d["last_modified"],
+                is_permanent=False
+            ))
 
     return DocumentListResponse(
         total_documents=len(docs_info),
         documents=docs_info,
-        corpus_directory=str(settings.CORPUS_DIR.resolve())
+        corpus_directory=str(settings.CORPUS_DIR.resolve()),
+        is_admin=is_admin
     )
 
 @router.post("/upload")
-async def upload_documents(files: List[UploadFile] = File(...)):
-    """Upload documents to backend/data/corpus and reindex FAISS."""
+async def upload_documents(
+    files: List[UploadFile] = File(...),
+    admin_password: Optional[str] = Form(None),
+    session_id: Optional[str] = Form(None)
+):
+    """
+    Upload endpoint:
+    - If admin_password matches settings.ADMIN_PASSWORD: save permanently to corpus.
+    - Otherwise: save into isolated temporary session for this visitor only.
+    """
     saved_files = []
     errors = []
+    is_admin = (admin_password == settings.ADMIN_PASSWORD)
 
-    for file in files:
-        try:
-            target_path = settings.CORPUS_DIR / file.filename
-            with open(target_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-            saved_files.append(file.filename)
-        except Exception as e:
-            errors.append({"file": file.filename, "error": str(e)})
+    if is_admin:
+        # Permanent storage
+        target_dir = settings.CORPUS_DIR
+        for file in files:
+            try:
+                dest = target_dir / file.filename
+                with open(dest, "wb") as buffer:
+                    shutil.copyfileobj(file.file, buffer)
+                saved_files.append(file.filename)
+            except Exception as e:
+                errors.append({"file": file.filename, "error": str(e)})
 
-    reindex_result = rag_engine.reindex_all()
+        reindex_result = rag_engine.reindex_all()
+        return {
+            "status": "success",
+            "is_permanent": True,
+            "uploaded_files": saved_files,
+            "errors": errors,
+            "reindex_result": reindex_result,
+            "message": f"Admin: Successfully added {len(saved_files)} file(s) permanently."
+        }
+    else:
+        # Temporary guest session storage
+        if not session_id:
+            session_id = datetime.datetime.now().strftime("guest_%Y%m%d_%H%M%S")
 
-    return {
-        "status": "success",
-        "uploaded_files": saved_files,
-        "errors": errors,
-        "reindex_result": reindex_result,
-        "message": f"Successfully uploaded {len(saved_files)} file(s) and rebuilt index."
-    }
+        corpus_dir = session_manager.get_session_corpus_dir(session_id)
+        for file in files:
+            try:
+                dest = corpus_dir / file.filename
+                with open(dest, "wb") as buffer:
+                    shutil.copyfileobj(file.file, buffer)
+                saved_files.append(file.filename)
+            except Exception as e:
+                errors.append({"file": file.filename, "error": str(e)})
+
+        session_reindex = session_manager.reindex_session(session_id)
+        return {
+            "status": "success",
+            "is_permanent": False,
+            "session_id": session_id,
+            "uploaded_files": saved_files,
+            "errors": errors,
+            "reindex_result": session_reindex,
+            "message": f"Temporary Session: Uploaded {len(saved_files)} private file(s). These are isolated only to you and deleted on exit."
+        }
 
 @router.delete("/documents/{filename}")
-def delete_document(filename: str):
+def delete_document(
+    filename: str,
+    x_admin_password: Optional[str] = Header(None),
+    x_session_id: Optional[str] = Header(None)
+):
+    # Check if file belongs to guest session first
+    if x_session_id and session_manager.delete_session_file(x_session_id, filename):
+        return {"status": "success", "message": f"Deleted temporary file {filename} from your session."}
+
+    # Permanent file deletion requires ADMIN_PASSWORD
+    if x_admin_password != settings.ADMIN_PASSWORD:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied. Only the administrator can delete permanent corpus documents."
+        )
+
     target = settings.CORPUS_DIR / filename
     if not target.exists() or not target.is_file():
         raise HTTPException(status_code=404, detail="File not found")
@@ -118,12 +199,21 @@ def delete_document(filename: str):
     try:
         os.remove(target)
         reindex_result = rag_engine.reindex_all()
-        return {"status": "success", "message": f"Deleted {filename} and updated index.", "reindex_result": reindex_result}
+        return {"status": "success", "message": f"Deleted permanent file {filename}.", "reindex_result": reindex_result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete file: {e}")
 
+@router.post("/session/clear")
+def clear_guest_session(session_id: str = Form(...)):
+    """Called when guest exits or leaves to immediately wipe all private files."""
+    session_manager.clear_session(session_id)
+    return {"status": "success", "message": f"Session {session_id} purged."}
+
 @router.post("/reindex", response_model=ReindexResponse)
-def trigger_reindex(req: ReindexRequest = ReindexRequest()):
+def trigger_reindex(
+    req: ReindexRequest = ReindexRequest(),
+    x_admin_password: Optional[str] = Header(None)
+):
     chunk_size = req.chunk_size or settings.DEFAULT_CHUNK_SIZE
     chunk_overlap = req.chunk_overlap or settings.DEFAULT_CHUNK_OVERLAP
     res = rag_engine.reindex_all(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
@@ -131,7 +221,6 @@ def trigger_reindex(req: ReindexRequest = ReindexRequest()):
 
 @router.post("/settings")
 def update_settings(req: ConfigUpdateRequest):
-    """Update runtime hyperparameters. API keys cannot be modified from the client."""
     if req.groq_model is not None:
         settings.GROQ_MODEL = req.groq_model.strip()
     if req.similarity_threshold is not None:

@@ -14,7 +14,34 @@ export default function App() {
   const [isReindexing, setIsReindexing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Default to clean light mode
+  // Admin authentication state
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+
+  // Guest session ID (unique per browser session, erased on exit)
+  const [sessionId] = useState(() => {
+    let sid = sessionStorage.getItem('nexus_session_id');
+    if (!sid) {
+      sid = 'guest_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now();
+      sessionStorage.setItem('nexus_session_id', sid);
+    }
+    return sid;
+  });
+
+  // Automatically delete temporary guest files when visitor leaves
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!isAdmin && sessionId) {
+        const formData = new FormData();
+        formData.append('session_id', sessionId);
+        navigator.sendBeacon(`${API_BASE}/session/clear`, formData);
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [sessionId, isAdmin]);
+
+  // Theme management (default light, toggleable to dark)
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('nexus_theme') || 'light';
   });
@@ -62,7 +89,11 @@ export default function App() {
 
   const fetchDocuments = async () => {
     try {
-      const res = await fetch(`${API_BASE}/documents`);
+      const headers = { 'x-session-id': sessionId };
+      if (isAdmin && adminPassword) {
+        headers['x-admin-password'] = adminPassword;
+      }
+      const res = await fetch(`${API_BASE}/documents`, { headers });
       if (res.ok) {
         const data = await res.json();
         setDocuments(data.documents);
@@ -78,14 +109,18 @@ export default function App() {
     fetchDocuments();
     const interval = setInterval(fetchStats, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [sessionId, isAdmin, adminPassword]);
 
   const handleReindex = async () => {
     setIsReindexing(true);
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (isAdmin && adminPassword) {
+        headers['x-admin-password'] = adminPassword;
+      }
       const res = await fetch(`${API_BASE}/reindex`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ chunk_size: 300, chunk_overlap: 50 })
       });
       if (res.ok) {
@@ -101,7 +136,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#fafafa] dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-150">
-      {/* Top Navigation Bar */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -111,12 +145,12 @@ export default function App() {
         onToggleTheme={toggleTheme}
       />
 
-      {/* Main Content Area */}
       <main className="flex-1">
         {activeTab === 'chat' && (
           <ChatView
             apiUrl={API_BASE}
             settingsConfig={settingsConfig}
+            sessionId={sessionId}
           />
         )}
 
@@ -131,11 +165,15 @@ export default function App() {
             onReindex={handleReindex}
             isReindexing={isReindexing}
             apiUrl={API_BASE}
+            sessionId={sessionId}
+            isAdmin={isAdmin}
+            setIsAdmin={setIsAdmin}
+            adminPassword={adminPassword}
+            setAdminPassword={setAdminPassword}
           />
         )}
       </main>
 
-      {/* Settings Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}

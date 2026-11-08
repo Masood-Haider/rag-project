@@ -1,5 +1,15 @@
 {
   "chunks": [
+    "# Machine Learning Evaluation & The RAG Triad ## 1. Classification Metrics Overview\nIn classific",
+    "## 1. Classification Metrics Overview\nIn classification problems, predictions are evaluated against true labels using four basic outcomes:\n- **True Positive (TP)**: Correctly predicted positive event.\n- **True Negative (TN)**: Correctly predicted negative event. - **False Positive (Type I Error)**: Incorrectly p",
+    "- **False Positive (Type I Error)**: Incorrectly predicted positive event.\n- **False Negative (Type II Error)**: Incorrectly predicted negative event. ### F1-Score\nThe F1-Score is the harmonic mean of",
+    "### F1-Score\nThe F1-Score is the harmonic mean of precision and recall. It balances precision and recall when the class distribution is heavily skewed or imbalanced:\n$$\\text{F1} = 2 \\times \\frac{\\text{Precision} \\times \\text{Recall}}{\\text{Precision} + \\text{Recall}}$$ ### ROC-AUC (Area Under the Receiver Operating Cha",
+    "### ROC-AUC (Area Under the Receiver Operating Characteristic Curve) ROC-AUC measures the model's ability to discrimina",
+    "ROC-AUC measures the model's ability to discriminate between positive and negative classes across all possible classification thresholds. A random guess achieves an AUC of 0.50, whereas a perfect classifier achieves an AUC of 1.00. ---\n\n## 2. The RAG Triad of Metrics\nWhen evaluatin",
+    "---\n\n## 2. The RAG Triad of Metrics\nWhen evaluating a Retrieval-Augmented Generation (RAG) system, three core metrics define whether the pipeline is performing reliably: 1. **Context Relevance (Retrieval)**:\n   Measures",
+    "1. **Context Relevance (Retrieval)**:\n   Measures whether the retrieved chunks are relevant to the user query. If retrieval returns irrelevant context, the LLM will either fail to answer or suffer from the \"lost in the middle\" effect. 2. **Groundedness / Faithfulness (Hallucination Co",
+    "2. **Groundedness / Faithfulness (Hallucination Control)**:\n   Measures whether every claim made in the generated answer can be strictly traced back to the retrieved context chunks. If an answer contains facts not present in the context, it is deemed unfaithful or hallucinated. 3. **Answer Relevance (Generation)**:\n   Measures",
+    "3. **Answer Relevance (Generation)**:\n   Measures whether the final response directly addresses the user's initial question without drifting into tangential topics.",
     "Week 8 Concept Guide: Retrieval-Augmented Generation (RAG) and Evaluation 1. Definition of RAG",
     "1. Definition of RAG Retrieval-Augmented Generation (RAG) is an AI arch",
     "Retrieval-Augmented Generation (RAG) is an AI architecture that combines an information retrieval system with a generative large language model (LLM). Instead of relying exclusively on facts stored in",
@@ -20,6 +30,16 @@
     "- Top-k Retrieval: The parameter k determines how many closest chunks are retrieved from the index and supplied to the augmented prompt."
   ],
   "sources": [
+    "machine_learning_evaluation.md",
+    "machine_learning_evaluation.md",
+    "machine_learning_evaluation.md",
+    "machine_learning_evaluation.md",
+    "machine_learning_evaluation.md",
+    "machine_learning_evaluation.md",
+    "machine_learning_evaluation.md",
+    "machine_learning_evaluation.md",
+    "machine_learning_evaluation.md",
+    "machine_learning_evaluation.md",
     "sample_course_notes.txt",
     "sample_course_notes.txt",
     "sample_course_notes.txt",
@@ -39,6 +59,6 @@
     "sample_course_notes.txt",
     "sample_course_notes.txt"
   ],
-  "total_chunks": 18,
+  "total_chunks": 28,
   "dimension": 384
 }

@@ -7,6 +7,7 @@ from .document_loader import load_corpus
 from .embeddings import embedding_service
 from .vector_store import vector_store
 from .hybrid_retriever import hybrid_retriever
+from .session_manager import session_manager
 
 class RAGEngine:
     def __init__(self):
@@ -27,12 +28,12 @@ class RAGEngine:
                 self.groq_client = "rest"
 
     def reindex_all(self, chunk_size: int = settings.DEFAULT_CHUNK_SIZE, chunk_overlap: int = settings.DEFAULT_CHUNK_OVERLAP) -> Dict[str, Any]:
-        """Ingest all documents in corpus, chunk, embed, and update FAISS index."""
+        """Ingest all permanent documents in corpus, chunk, embed, and update FAISS index."""
         docs = load_corpus(settings.CORPUS_DIR)
         if not docs:
             return {
                 "status": "warning",
-                "message": "No documents found in corpus directory.",
+                "message": "No permanent documents found in corpus directory.",
                 "total_docs": 0,
                 "total_chunks": 0
             }
@@ -60,19 +61,38 @@ class RAGEngine:
 
         return {
             "status": "success",
-            "message": f"Successfully indexed {len(docs)} documents into {len(all_chunks)} chunks.",
+            "message": f"Successfully indexed {len(docs)} permanent documents into {len(all_chunks)} chunks.",
             "total_docs": len(docs),
             "total_chunks": len(all_chunks),
             "dimension": vector_store.dimension
         }
 
-    def retrieve_chunks(self, question: str, k: int = settings.DEFAULT_K, use_hybrid: bool = False) -> List[Dict[str, Any]]:
-        """Retrieve relevant context chunks via Semantic FAISS or Hybrid."""
+    def retrieve_chunks(self, question: str, k: int = settings.DEFAULT_K, use_hybrid: bool = False, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Retrieve chunks from permanent index and private guest session index (if any).
+        """
+        # 1. Retrieve from permanent index
         if use_hybrid:
-            return hybrid_retriever.retrieve(question, k=k)
-        
-        q_vec = embedding_service.embed([question])
-        return vector_store.search(q_vec, k=k)
+            permanent_hits = hybrid_retriever.retrieve(question, k=k)
+        else:
+            q_vec = embedding_service.embed([question])
+            permanent_hits = vector_store.search(q_vec, k=k)
+
+        # 2. Retrieve from guest private session index if session_id provided
+        session_hits = []
+        if session_id:
+            try:
+                session_hits = session_manager.retrieve_chunks(session_id, question, k=k)
+            except Exception as e:
+                print(f"Session retrieval error: {e}")
+
+        if not session_hits:
+            return permanent_hits
+
+        # Merge and sort by similarity score descending
+        combined = permanent_hits + session_hits
+        combined.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+        return combined[:k]
 
     def build_prompt(self, question: str, hits: List[Dict[str, Any]]) -> str:
         """Construct the grounded augmented prompt."""
@@ -140,9 +160,9 @@ class RAGEngine:
         except Exception as e:
             return f"[Groq Connection Error]: {str(e)}"
 
-    def query(self, question: str, k: int = settings.DEFAULT_K, use_hybrid: bool = False, compare_plain: bool = False, model_name: Optional[str] = None) -> Dict[str, Any]:
+    def query(self, question: str, k: int = settings.DEFAULT_K, use_hybrid: bool = False, compare_plain: bool = False, model_name: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Execute full RAG pipeline."""
-        hits = self.retrieve_chunks(question, k=k, use_hybrid=use_hybrid)
+        hits = self.retrieve_chunks(question, k=k, use_hybrid=use_hybrid, session_id=session_id)
         
         top_score = hits[0]["score"] if hits else 0.0
         is_low_confidence = top_score < self.threshold

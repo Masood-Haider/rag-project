@@ -17,8 +17,12 @@ class Settings:
     BACKEND_DIR: Path = Path(__file__).resolve().parent.parent
     CORPUS_DIR: Path = Path(os.getenv("CORPUS_DIR", BACKEND_DIR / "data" / "corpus"))
     STORAGE_DIR: Path = Path(os.getenv("STORAGE_DIR", BACKEND_DIR / "data" / "storage"))
+    SESSIONS_DIR: Path = Path(os.getenv("SESSIONS_DIR", BACKEND_DIR / "data" / "sessions"))
 
-    # Groq Settings (Server-side ONLY - never exposed or set via frontend)
+    # Admin access password for permanent corpus uploads
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "change_this_admin_password_123")
+
+    # Groq Settings (Server-side ONLY - never exposed to frontend)
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 
@@ -48,3 +52,4 @@ settings = Settings()
 # Ensure directories exist
 settings.CORPUS_DIR.mkdir(parents=True, exist_ok=True)
 settings.STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+settings.SESSIONS_DIR.mkdir(parents=True, exist_ok=True)

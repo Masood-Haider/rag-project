@@ -84,22 +84,17 @@ rag-project/
 
 ---
 
-## 🗄️ Uploading Your Database / Knowledge Base Files
+## 🔒 Access Control: Permanent vs Temporary Files
 
-You can add files to your RAG database in two ways:
-
-### Option 1: Direct File Drop
-Place any text or document files directly into the folder:
-```
-backend/data/corpus/
-```
-Supported formats: `.txt`, `.md`, `.pdf`, `.csv`, `.json`.
-
-### Option 2: Web Dashboard
-1. Open the web interface.
-2. Click on the **Database Files** tab.
-3. Drag & drop your files into the upload box.
-4. The system will automatically chunk, embed, and update the FAISS index!
+To keep your knowledge base clean and protected in public deployments:
+- **Admin Password**: Set `ADMIN_PASSWORD` in `backend/.env`.
+  - When unlocked via **Admin Login** in the web dashboard, uploaded documents are saved **permanently** into `backend/data/corpus/` and indexed for all users.
+  - Only the administrator can delete permanent files.
+- **Guest / Visitor Mode**:
+  - Anyone visiting the site without the admin password gets an **isolated, temporary session**.
+  - Any files they upload are sandboxed exclusively to their browser session.
+  - Other users **cannot** see, search, or access guest files.
+  - When the visitor leaves or closes the tab, their temporary files are automatically wiped cleanly from the server.
 
 ---
 

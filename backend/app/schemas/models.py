@@ -15,6 +15,7 @@ class QueryRequest(BaseModel):
     use_hybrid: bool = Field(False, description="Combine semantic search with TF-IDF keyword search")
     compare_plain: bool = Field(True, description="Also generate answer without RAG context for side-by-side comparison")
     model_name: Optional[str] = Field(None, description="Groq model identifier")
+    session_id: Optional[str] = Field(None, description="Private guest session ID for temporary files")
 
 class QueryResponse(BaseModel):
     question: str
@@ -45,11 +46,13 @@ class DocumentInfo(BaseModel):
     char_count: int
     size_kb: float
     last_modified: str
+    is_permanent: bool = True
 
 class DocumentListResponse(BaseModel):
     total_documents: int
     documents: List[DocumentInfo]
     corpus_directory: str
+    is_admin: bool = False
 
 class StatsResponse(BaseModel):
     total_documents: int
@@ -63,6 +66,12 @@ class StatsResponse(BaseModel):
     groq_configured: bool
 
 class ConfigUpdateRequest(BaseModel):
-    # Only hyperparameters can be updated by clients - API keys are strictly server-side
     groq_model: Optional[str] = None
     similarity_threshold: Optional[float] = None
+
+class AdminVerifyRequest(BaseModel):
+    password: str
+
+class AdminVerifyResponse(BaseModel):
+    success: bool
+    message: str

@@ -76,7 +76,7 @@ function FormattedMessage({ text }) {
   );
 }
 
-export default function ChatView({ apiUrl, settingsConfig }) {
+export default function ChatView({ apiUrl, settingsConfig, sessionId }) {
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([
@@ -114,7 +114,8 @@ export default function ChatView({ apiUrl, settingsConfig }) {
           k: settingsConfig.k,
           use_hybrid: settingsConfig.useHybrid,
           compare_plain: settingsConfig.comparePlain,
-          model_name: settingsConfig.llmModel
+          model_name: settingsConfig.llmModel,
+          session_id: sessionId
         })
       });
 
