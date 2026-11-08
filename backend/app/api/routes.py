@@ -118,19 +118,37 @@ def verify_admin(req: AdminVerifyRequest):
     return AdminVerifyResponse(success=False, message="Incorrect admin password.")
 
 @router.get("/stats", response_model=StatsResponse)
-def get_stats():
+def get_stats(
+    x_session_id: Optional[str] = Header(None),
+    x_admin_password: Optional[str] = Header(None)
+):
     docs = load_corpus(settings.CORPUS_DIR)
+    is_admin = _check_admin(x_admin_password)
+    chunk_size = settings.DEFAULT_CHUNK_SIZE
+    chunk_overlap = settings.DEFAULT_CHUNK_OVERLAP
+    default_k = settings.DEFAULT_K
+    sim_threshold = settings.SIMILARITY_THRESHOLD
+    llm_model = settings.GROQ_MODEL
+
+    if not is_admin and x_session_id and x_session_id in session_manager.session_configs:
+        cfg = session_manager.session_configs[x_session_id]
+        chunk_size = cfg.get("chunk_size", chunk_size)
+        chunk_overlap = cfg.get("chunk_overlap", chunk_overlap)
+        default_k = cfg.get("k", default_k)
+        sim_threshold = cfg.get("similarity_threshold", sim_threshold)
+        llm_model = cfg.get("groq_model", llm_model)
+
     return StatsResponse(
         total_documents=len(docs),
         total_chunks=vector_store.total_vectors,
         vector_dimension=settings.EMBEDDING_DIMENSION,
         vector_store_type="FAISS IndexFlatIP (Exact Search)" if vector_store.is_faiss_available else "NumPy FlatIP Store",
         embedding_model=settings.EMBEDDING_MODEL,
-        llm_model=settings.GROQ_MODEL,
-        similarity_threshold=settings.SIMILARITY_THRESHOLD,
-        chunk_size=settings.DEFAULT_CHUNK_SIZE,
-        chunk_overlap=settings.DEFAULT_CHUNK_OVERLAP,
-        default_k=settings.DEFAULT_K,
+        llm_model=llm_model,
+        similarity_threshold=sim_threshold,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        default_k=default_k,
         faiss_available=vector_store.is_faiss_available,
         groq_configured=bool(settings.GROQ_API_KEY)
     )
@@ -295,6 +313,7 @@ def delete_document(
     # Record in persistent tombstone blacklist so it is never re-copied
     record_deleted_file(filename)
 
+    target = settings.CORPUS_DIR / filename
     deleted_any = False
     try:
         if target.exists():
@@ -331,32 +350,107 @@ def clear_guest_session(session_id: str = Form(...)):
 @router.post("/reindex", response_model=ReindexResponse)
 def trigger_reindex(
     req: ReindexRequest = ReindexRequest(),
-    x_admin_password: Optional[str] = Header(None)
+    x_admin_password: Optional[str] = Header(None),
+    x_session_id: Optional[str] = Header(None)
 ):
+    is_admin = _check_admin(x_admin_password)
     chunk_size = req.chunk_size or settings.DEFAULT_CHUNK_SIZE
     chunk_overlap = req.chunk_overlap or settings.DEFAULT_CHUNK_OVERLAP
-    res = rag_engine.reindex_all(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-    return ReindexResponse(**res)
+
+    if is_admin:
+        res = rag_engine.reindex_all(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        return ReindexResponse(**res)
+    else:
+        sid = x_session_id or req.session_id
+        if sid:
+            res = session_manager.reindex_session(sid, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+            return ReindexResponse(**res)
+        return ReindexResponse(
+            status="success",
+            message="No private documents in this session to reindex.",
+            total_docs=0,
+            total_chunks=0,
+            dimension=settings.EMBEDDING_DIMENSION
+        )
 
 @router.post("/settings")
-def update_settings(req: ConfigUpdateRequest):
-    if req.groq_model is not None:
-        settings.GROQ_MODEL = req.groq_model.strip()
-    if req.similarity_threshold is not None:
-        settings.SIMILARITY_THRESHOLD = req.similarity_threshold
-        rag_engine.threshold = req.similarity_threshold
-    if req.chunk_size is not None:
-        settings.DEFAULT_CHUNK_SIZE = req.chunk_size
-    if req.chunk_overlap is not None:
-        settings.DEFAULT_CHUNK_OVERLAP = req.chunk_overlap
-    if req.k is not None:
-        settings.DEFAULT_K = req.k
+def update_settings(
+    req: ConfigUpdateRequest,
+    x_admin_password: Optional[str] = Header(None),
+    x_session_id: Optional[str] = Header(None)
+):
+    is_admin = _check_admin(x_admin_password)
+    sid = req.session_id or x_session_id
 
-    return {
-        "status": "success",
-        "groq_model": settings.GROQ_MODEL,
-        "similarity_threshold": settings.SIMILARITY_THRESHOLD,
-        "chunk_size": settings.DEFAULT_CHUNK_SIZE,
-        "chunk_overlap": settings.DEFAULT_CHUNK_OVERLAP,
-        "default_k": settings.DEFAULT_K
-    }
+    if is_admin:
+        if req.groq_model is not None:
+            settings.GROQ_MODEL = req.groq_model.strip()
+        if req.similarity_threshold is not None:
+            settings.SIMILARITY_THRESHOLD = req.similarity_threshold
+            rag_engine.threshold = req.similarity_threshold
+        if req.chunk_size is not None:
+            settings.DEFAULT_CHUNK_SIZE = req.chunk_size
+        if req.chunk_overlap is not None:
+            settings.DEFAULT_CHUNK_OVERLAP = req.chunk_overlap
+        if req.k is not None:
+            settings.DEFAULT_K = req.k
+
+        # Auto rebuild permanent index with new chunk parameters
+        reindex_res = rag_engine.reindex_all(
+            chunk_size=settings.DEFAULT_CHUNK_SIZE,
+            chunk_overlap=settings.DEFAULT_CHUNK_OVERLAP
+        )
+
+        return {
+            "status": "success",
+            "is_admin": True,
+            "groq_model": settings.GROQ_MODEL,
+            "similarity_threshold": settings.SIMILARITY_THRESHOLD,
+            "chunk_size": settings.DEFAULT_CHUNK_SIZE,
+            "chunk_overlap": settings.DEFAULT_CHUNK_OVERLAP,
+            "default_k": settings.DEFAULT_K,
+            "reindex_result": reindex_res,
+            "message": "Permanent admin defaults saved. Knowledge base index rebuilt successfully."
+        }
+    else:
+        # Guest changes are temporary for their session only
+        session_cfg = session_manager.session_configs.get(sid, {}) if sid else {}
+        if req.groq_model is not None:
+            session_cfg["groq_model"] = req.groq_model.strip()
+        if req.similarity_threshold is not None:
+            session_cfg["similarity_threshold"] = req.similarity_threshold
+        if req.chunk_size is not None:
+            session_cfg["chunk_size"] = req.chunk_size
+        if req.chunk_overlap is not None:
+            session_cfg["chunk_overlap"] = req.chunk_overlap
+        if req.k is not None:
+            session_cfg["k"] = req.k
+
+        reindex_res = None
+        if sid:
+            session_manager.session_configs[sid] = session_cfg
+            reindex_res = session_manager.reindex_session(
+                sid,
+                chunk_size=session_cfg.get("chunk_size", settings.DEFAULT_CHUNK_SIZE),
+                chunk_overlap=session_cfg.get("chunk_overlap", settings.DEFAULT_CHUNK_OVERLAP)
+            )
+        else:
+            reindex_res = {
+                "status": "success",
+                "message": "Temporary settings updated.",
+                "total_docs": 0,
+                "total_chunks": 0,
+                "dimension": settings.EMBEDDING_DIMENSION
+            }
+
+        return {
+            "status": "success",
+            "is_admin": False,
+            "groq_model": session_cfg.get("groq_model", settings.GROQ_MODEL),
+            "similarity_threshold": session_cfg.get("similarity_threshold", settings.SIMILARITY_THRESHOLD),
+            "chunk_size": session_cfg.get("chunk_size", settings.DEFAULT_CHUNK_SIZE),
+            "chunk_overlap": session_cfg.get("chunk_overlap", settings.DEFAULT_CHUNK_OVERLAP),
+            "default_k": session_cfg.get("k", settings.DEFAULT_K),
+            "reindex_result": reindex_res,
+            "message": "Temporary session settings applied. Permanent defaults remain unchanged."
+        }

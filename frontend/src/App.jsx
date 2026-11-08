@@ -139,12 +139,16 @@ export default function App() {
       if (isAdmin && adminPassword) {
         headers['x-admin-password'] = adminPassword;
       }
+      if (sessionId) {
+        headers['x-session-id'] = sessionId;
+      }
       const res = await fetch(`${API_BASE}/reindex`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           chunk_size: settingsConfig.chunkSize || 300,
-          chunk_overlap: settingsConfig.chunkOverlap || 50
+          chunk_overlap: settingsConfig.chunkOverlap || 50,
+          session_id: sessionId || null
         })
       });
       if (res.ok) {
@@ -204,6 +208,13 @@ export default function App() {
         settingsConfig={settingsConfig}
         onSaveSettings={(newCfg) => setSettingsConfig(newCfg)}
         apiUrl={API_BASE}
+        isAdmin={isAdmin}
+        adminPassword={adminPassword}
+        sessionId={sessionId}
+        onReindexComplete={async () => {
+          await fetchStats();
+          await fetchDocuments();
+        }}
       />
     </div>
   );

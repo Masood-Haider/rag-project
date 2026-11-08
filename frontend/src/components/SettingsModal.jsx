@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Sliders, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { X, Sliders, CheckCircle2, ShieldCheck, RefreshCw } from 'lucide-react';
 
 export default function SettingsModal({
   isOpen,
   onClose,
   settingsConfig,
   onSaveSettings,
-  apiUrl
+  apiUrl,
+  isAdmin = false,
+  adminPassword = '',
+  sessionId = '',
+  onReindexComplete
 }) {
   if (!isOpen) return null;
 
@@ -27,6 +31,8 @@ export default function SettingsModal({
   const [k, setK] = useState(settingsConfig.k || 5);
   const [useHybrid, setUseHybrid] = useState(settingsConfig.useHybrid || false);
   const [threshold, setThreshold] = useState(settingsConfig.threshold || 0.40);
+  const [isApplying, setIsApplying] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Free models hosted on Groq
@@ -38,16 +44,8 @@ export default function SettingsModal({
   ];
 
   const handleSave = async () => {
-    onSaveSettings({
-      groqModel,
-      k,
-      useHybrid,
-      comparePlain: false,
-      llmModel: groqModel,
-      threshold,
-      chunkSize,
-      chunkOverlap
-    });
+    setIsApplying(true);
+    setStatusMessage('Rebuilding vector index...');
 
     try {
       const payload = {
@@ -55,23 +53,53 @@ export default function SettingsModal({
         similarity_threshold: threshold,
         chunk_size: chunkSize,
         chunk_overlap: chunkOverlap,
-        k
+        k,
+        session_id: sessionId || null
       };
 
-      await fetch(`${apiUrl}/settings`, {
+      const headers = { 'Content-Type': 'application/json' };
+      if (isAdmin && adminPassword) {
+        headers['x-admin-password'] = adminPassword;
+      }
+      if (sessionId) {
+        headers['x-session-id'] = sessionId;
+      }
+
+      const res = await fetch(`${apiUrl}/settings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload)
       });
+      const data = await res.json();
+
+      onSaveSettings({
+        groqModel,
+        k,
+        useHybrid,
+        comparePlain: false,
+        llmModel: groqModel,
+        threshold,
+        chunkSize,
+        chunkOverlap
+      });
+
+      if (onReindexComplete) {
+        await onReindexComplete();
+      }
 
       setSavedSuccess(true);
+      setStatusMessage(data.message || (isAdmin ? 'Saved permanent server defaults!' : 'Saved for your session!'));
       setTimeout(() => {
         setSavedSuccess(false);
+        setIsApplying(false);
+        setStatusMessage('');
         onClose();
-      }, 700);
+      }, 900);
     } catch (e) {
       console.error(e);
-      onClose();
+      setIsApplying(false);
+      setStatusMessage('Error updating settings');
+      setTimeout(() => setStatusMessage(''), 2500);
     }
   };
 
@@ -87,17 +115,29 @@ export default function SettingsModal({
           </div>
           <button
             onClick={onClose}
+            disabled={isApplying}
             className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Server Security Notice */}
-        <div className="px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200/80 dark:border-zinc-800 flex items-center gap-2 text-[11px] text-zinc-500">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-          <span>API keys are stored securely on the server (<code className="font-mono">backend/.env</code>)</span>
-        </div>
+        {/* Admin vs Visitor Mode Banner */}
+        {isAdmin ? (
+          <div className="px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-start gap-2 text-[11px] text-emerald-800 dark:text-emerald-300">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold">Admin Mode:</span> Changes apply permanently as global defaults and automatically rebuild the central knowledge base index.
+            </div>
+          </div>
+        ) : (
+          <div className="px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200/80 dark:border-zinc-800 flex items-start gap-2 text-[11px] text-zinc-600 dark:text-zinc-400">
+            <Sliders className="w-4 h-4 text-zinc-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold">Visitor Session:</span> Changes apply temporarily to your active session only. Server defaults stay untouched.
+            </div>
+          </div>
+        )}
 
         {/* Model Selection */}
         <div className="space-y-1.5">
@@ -131,7 +171,7 @@ export default function SettingsModal({
               onChange={(e) => setChunkSize(parseInt(e.target.value))}
               className="w-full accent-zinc-900 dark:accent-zinc-100"
             />
-            <p className="text-[10px] text-zinc-500">Target chunk size.</p>
+            <p className="text-[10px] text-zinc-500">Auto-rebuilds index on save.</p>
           </div>
 
           <div className="space-y-1">
@@ -204,24 +244,42 @@ export default function SettingsModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
-          {savedSuccess && (
-            <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mr-auto font-medium">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Saved
-            </span>
-          )}
-          <button
-            onClick={onClose}
-            className="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-3.5 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 text-xs font-medium transition"
-          >
-            Apply Changes
-          </button>
+        <div className="flex items-center justify-between gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+          <div className="flex items-center gap-1.5 text-xs">
+            {isApplying && (
+              <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1 font-medium">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> {statusMessage || 'Rebuilding index...'}
+              </span>
+            )}
+            {!isApplying && savedSuccess && (
+              <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Saved & Reindexed!
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              disabled={isApplying}
+              className="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isApplying}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 text-xs font-medium transition disabled:opacity-50"
+            >
+              {isApplying ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Rebuilding...</span>
+                </>
+              ) : (
+                <span>Apply Changes</span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>,

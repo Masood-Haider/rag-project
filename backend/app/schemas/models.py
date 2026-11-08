@@ -33,6 +33,7 @@ class QueryResponse(BaseModel):
 class ReindexRequest(BaseModel):
     chunk_size: Optional[int] = 300
     chunk_overlap: Optional[int] = 50
+    session_id: Optional[str] = None
 
 class ReindexResponse(BaseModel):
     status: str
@@ -74,6 +75,7 @@ class ConfigUpdateRequest(BaseModel):
     chunk_size: Optional[int] = None
     chunk_overlap: Optional[int] = None
     k: Optional[int] = None
+    session_id: Optional[str] = None
 
 class AdminVerifyRequest(BaseModel):
     password: str

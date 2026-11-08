@@ -20,6 +20,7 @@ class SessionManager:
         self.base_dir = base_dir
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.session_stores: Dict[str, FAISSVectorStore] = {}
+        self.session_configs: Dict[str, Dict[str, Any]] = {}
 
     def get_session_corpus_dir(self, session_id: str) -> pathlib.Path:
         safe_id = "".join(c for c in session_id if c.isalnum() or c in "-_")
@@ -39,28 +40,50 @@ class SessionManager:
             self.session_stores[session_id] = FAISSVectorStore(storage_dir=storage_dir)
         return self.session_stores[session_id]
 
-    def reindex_session(self, session_id: str) -> Dict[str, Any]:
-        """Index only this session's uploaded documents."""
+    def reindex_session(self, session_id: str, chunk_size: Optional[int] = None, chunk_overlap: Optional[int] = None) -> Dict[str, Any]:
+        """Index only this session's uploaded documents with custom or default chunk parameters."""
+        if chunk_size is not None or chunk_overlap is not None:
+            cfg = self.session_configs.get(session_id, {})
+            if chunk_size is not None:
+                cfg["chunk_size"] = chunk_size
+            if chunk_overlap is not None:
+                cfg["chunk_overlap"] = chunk_overlap
+            self.session_configs[session_id] = cfg
+
+        actual_chunk_size = self.session_configs.get(session_id, {}).get("chunk_size", settings.DEFAULT_CHUNK_SIZE)
+        actual_chunk_overlap = self.session_configs.get(session_id, {}).get("chunk_overlap", settings.DEFAULT_CHUNK_OVERLAP)
+
         corpus_dir = self.get_session_corpus_dir(session_id)
         docs = load_corpus(corpus_dir)
+        store = self.get_session_store(session_id)
         if not docs:
-            store = self.get_session_store(session_id)
             store.build_index(embeddings=None, chunks=[], sources=[])
-            return {"total_docs": 0, "total_chunks": 0}
+            return {
+                "status": "success",
+                "message": "No private documents in this session.",
+                "total_docs": 0,
+                "total_chunks": 0,
+                "dimension": store.dimension
+            }
 
         all_chunks: List[str] = []
         all_sources: List[str] = []
         for doc in docs:
-            chunks = recursive_chunk(doc.text, chunk_size=settings.DEFAULT_CHUNK_SIZE, chunk_overlap=settings.DEFAULT_CHUNK_OVERLAP)
+            chunks = recursive_chunk(doc.text, chunk_size=actual_chunk_size, chunk_overlap=actual_chunk_overlap)
             for c in chunks:
                 all_chunks.append(c)
                 all_sources.append(f"[Private] {doc.filename}")
 
         embeddings = embedding_service.embed(all_chunks)
-        store = self.get_session_store(session_id)
         store.build_index(embeddings, all_chunks, all_sources)
 
-        return {"total_docs": len(docs), "total_chunks": len(all_chunks)}
+        return {
+            "status": "success",
+            "message": f"Successfully indexed {len(docs)} private document(s) into {len(all_chunks)} chunks for your session.",
+            "total_docs": len(docs),
+            "total_chunks": len(all_chunks),
+            "dimension": store.dimension
+        }
 
     def retrieve_chunks(self, session_id: str, question: str, k: int = 5) -> List[Dict[str, Any]]:
         """Retrieve chunks from the session's private index."""
