@@ -60,7 +60,30 @@ class Settings:
     # CORS
     CORS_ORIGINS: list[str] = ["*"]
 
+import json
+
 settings = Settings()
+
+def get_deleted_files() -> set:
+    tombstone_file = settings.STORAGE_DIR / "deleted_files.json"
+    if tombstone_file.exists():
+        try:
+            with open(tombstone_file, "r", encoding="utf-8") as f:
+                return set(json.load(f))
+        except Exception:
+            pass
+    return set()
+
+def record_deleted_file(filename: str):
+    settings.STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    tombstone_file = settings.STORAGE_DIR / "deleted_files.json"
+    deleted = get_deleted_files()
+    deleted.add(filename)
+    try:
+        with open(tombstone_file, "w", encoding="utf-8") as f:
+            json.dump(list(deleted), f)
+    except Exception:
+        pass
 
 # Ensure directories exist and copy bundled files on Vercel
 try:
@@ -70,8 +93,9 @@ try:
 
     # In Vercel, copy bundled starter documents to /tmp/nexus_corpus so they can be read & indexed
     if settings.IS_VERCEL and settings.BUNDLED_CORPUS_DIR.exists():
+        deleted_set = get_deleted_files()
         for f in settings.BUNDLED_CORPUS_DIR.iterdir():
-            if f.is_file():
+            if f.is_file() and not f.name.startswith(".") and f.name not in deleted_set:
                 dest = settings.CORPUS_DIR / f.name
                 if not dest.exists():
                     shutil.copy2(f, dest)

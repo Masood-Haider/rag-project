@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, UploadFile, File, Header, Form, HTTPException, status
 
-from ..config import settings
+from ..config import settings, record_deleted_file
 from ..schemas.models import (
     QueryRequest, QueryResponse,
     ReindexRequest, ReindexResponse,
@@ -292,19 +292,31 @@ def delete_document(
             detail="Incorrect admin password. Permanent documents can only be deleted with the admin password."
         )
 
-    target = settings.CORPUS_DIR / filename
-    if not target.exists() or not target.is_file():
-        raise HTTPException(status_code=404, detail=f"File {filename} not found.")
+    # Record in persistent tombstone blacklist so it is never re-copied
+    record_deleted_file(filename)
 
+    deleted_any = False
     try:
         if target.exists():
             os.remove(target)
+            deleted_any = True
+
+        # Also remove from bundled corpus if writable
+        bundled_target = settings.BUNDLED_CORPUS_DIR / filename
+        if bundled_target.exists():
+            try:
+                os.remove(bundled_target)
+                deleted_any = True
+            except Exception:
+                pass
+
         if settings.GITHUB_TOKEN:
             _delete_from_github_repo(filename)
+
         reindex_result = rag_engine.reindex_all()
         return {
             "status": "success",
-            "message": f"Successfully deleted {filename} from permanent knowledge base.",
+            "message": f"Successfully deleted {filename} permanently from the knowledge base.",
             "reindex_result": reindex_result
         }
     except Exception as e:
