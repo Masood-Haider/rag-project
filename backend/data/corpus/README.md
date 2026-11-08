@@ -14,3 +14,4 @@ The RAG system reads and indexes every supported document found here.
    `backend/data/corpus/`
 2. **Via Web Dashboard:** You can also drag and drop your files directly through the React web interface at the **"Knowledge Base Documents"** tab.
 3. **Re-Index:** Click **"Rebuild Index"** in the UI or call `POST /api/reindex` to chunk, embed, and store your documents into FAISS!
+

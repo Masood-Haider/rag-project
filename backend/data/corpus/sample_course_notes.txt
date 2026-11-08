@@ -17,3 +17,4 @@ FAISS (Facebook AI Similarity Search) is a library developed by Meta AI for effi
 - Flat Index (IndexFlatIP): An exact search index. It does not use approximations or clustering shortcuts. It compares the query vector against every single vector in the index. When vectors are L2-normalized, the inner product (IP) equals cosine similarity. IndexFlatIP achieves 100% recall and is the optimal choice for corpora below 100,000 vectors.
 - IVF Index (IndexIVFFlat): An inverted file index using k-means clustering to partition the vector space into Voronoi cells. At query time, only vectors inside the nearest nprobe clusters are evaluated. It offers immense speedup for millions of vectors at the cost of approximate recall.
 - Top-k Retrieval: The parameter k determines how many closest chunks are retrieved from the index and supplied to the augmented prompt.
+

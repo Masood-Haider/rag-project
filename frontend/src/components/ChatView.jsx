@@ -256,3 +256,4 @@ export default function ChatView({ apiUrl, settingsConfig }) {
     </div>
   );
 }
+

@@ -126,3 +126,4 @@ class EmbeddingService:
         return (dense / norms).astype("float32")
 
 embedding_service = EmbeddingService()
+

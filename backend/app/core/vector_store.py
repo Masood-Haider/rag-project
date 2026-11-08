@@ -162,3 +162,4 @@ class FAISSVectorStore:
         return len(self.chunks)
 
 vector_store = FAISSVectorStore()
+

@@ -18,14 +18,20 @@ class Settings:
     CORPUS_DIR: Path = Path(os.getenv("CORPUS_DIR", BACKEND_DIR / "data" / "corpus"))
     STORAGE_DIR: Path = Path(os.getenv("STORAGE_DIR", BACKEND_DIR / "data" / "storage"))
 
-    # Model settings
+    # LLM Provider: "groq" or "huggingface"
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "groq")
+
+    # Groq Settings (Free tier models)
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+
+    # Hugging Face Settings (Fallback/alternative)
     HF_TOKEN: str = os.getenv("HF_TOKEN", "")
     DEFAULT_LLM_MODEL: str = os.getenv("LLM_MODEL", "deepseek-ai/DeepSeek-V3-0324")
+
+    # Embedding settings
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
     EMBEDDING_DIMENSION: int = 384
-
-    # Embedding provider: "local" (uses torch/transformers/sentence_transformers)
-    # or "hf_api" (calls HuggingFace Inference API with HF_TOKEN)
     EMBEDDING_PROVIDER: str = os.getenv("EMBEDDING_PROVIDER", "auto")
 
     # RAG defaults from notebook

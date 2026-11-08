@@ -1,7 +1,9 @@
 import React from 'react';
-import { Database, MessageSquare, Sliders, ShieldCheck, Cpu } from 'lucide-react';
+import { Database, MessageSquare, Sliders, Cpu, Zap } from 'lucide-react';
 
 export default function Navbar({ activeTab, setActiveTab, stats, onOpenSettings }) {
+  const isGroq = stats?.llm_provider === 'groq';
+
   return (
     <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -14,11 +16,14 @@ export default function Navbar({ activeTab, setActiveTab, stats, onOpenSettings 
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-lg tracking-tight text-white">RAG Studio</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
-                FAISS + DeepSeek
+              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
+                {isGroq ? <Zap className="w-3 h-3 text-amber-400" /> : null}
+                {isGroq ? 'Groq + FAISS' : 'FAISS + DeepSeek'}
               </span>
             </div>
-            <p className="text-xs text-slate-400">Week 8 RAG Grounded System</p>
+            <p className="text-xs text-slate-400">
+              {stats?.llm_model ? `Model: ${stats.llm_model}` : 'Week 8 RAG Grounded System'}
+            </p>
           </div>
         </div>
 

@@ -84,3 +84,4 @@ def load_corpus(corpus_dir: pathlib.Path) -> List[LoadedDocument]:
                 documents.append(doc)
 
     return documents
+

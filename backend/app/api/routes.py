@@ -23,28 +23,31 @@ def health_check():
     return {
         "status": "healthy",
         "service": settings.PROJECT_NAME,
-        "version": settings.VERSION
+        "version": settings.VERSION,
+        "llm_provider": settings.LLM_PROVIDER
     }
 
 @router.get("/stats", response_model=StatsResponse)
 def get_stats():
     docs = load_corpus(settings.CORPUS_DIR)
+    active_model = settings.GROQ_MODEL if settings.LLM_PROVIDER == "groq" else settings.DEFAULT_LLM_MODEL
     return StatsResponse(
         total_documents=len(docs),
         total_chunks=vector_store.total_vectors,
         vector_dimension=settings.EMBEDDING_DIMENSION,
         vector_store_type="FAISS IndexFlatIP (Exact Search)" if vector_store.is_faiss_available else "NumPy FlatIP Store",
         embedding_model=settings.EMBEDDING_MODEL,
-        llm_model=settings.DEFAULT_LLM_MODEL,
+        llm_model=active_model,
+        llm_provider=settings.LLM_PROVIDER,
         similarity_threshold=settings.SIMILARITY_THRESHOLD,
         faiss_available=vector_store.is_faiss_available,
+        groq_configured=bool(settings.GROQ_API_KEY),
         hf_token_configured=bool(settings.HF_TOKEN)
     )
 
 @router.post("/query", response_model=QueryResponse)
 def query_rag(req: QueryRequest):
     if vector_store.total_vectors == 0:
-        # Auto-index if database exists
         docs = load_corpus(settings.CORPUS_DIR)
         if docs:
             rag_engine.reindex_all()
@@ -86,10 +89,7 @@ def list_documents():
 
 @router.post("/upload")
 async def upload_documents(files: List[UploadFile] = File(...)):
-    """
-    Endpoint where user uploads their database files for RAG.
-    Saves directly to backend/data/corpus.
-    """
+    """Upload documents to backend/data/corpus and reindex FAISS."""
     saved_files = []
     errors = []
 
@@ -102,7 +102,6 @@ async def upload_documents(files: List[UploadFile] = File(...)):
         except Exception as e:
             errors.append({"file": file.filename, "error": str(e)})
 
-    # Auto re-index after upload
     reindex_result = rag_engine.reindex_all()
 
     return {
@@ -121,7 +120,6 @@ def delete_document(filename: str):
 
     try:
         os.remove(target)
-        # Re-index
         reindex_result = rag_engine.reindex_all()
         return {"status": "success", "message": f"Deleted {filename} and updated index.", "reindex_result": reindex_result}
     except Exception as e:
@@ -136,19 +134,27 @@ def trigger_reindex(req: ReindexRequest = ReindexRequest()):
 
 @router.post("/settings")
 def update_settings(req: ConfigUpdateRequest):
+    if req.groq_api_key is not None:
+        settings.GROQ_API_KEY = req.groq_api_key.strip()
+        rag_engine._init_llm_clients()
+    if req.groq_model is not None:
+        settings.GROQ_MODEL = req.groq_model.strip()
+    if req.llm_provider is not None:
+        settings.LLM_PROVIDER = req.llm_provider.strip()
     if req.hf_token is not None:
         settings.HF_TOKEN = req.hf_token.strip()
-        rag_engine._init_llm_client()
+        rag_engine._init_llm_clients()
     if req.llm_model is not None:
         settings.DEFAULT_LLM_MODEL = req.llm_model.strip()
-        rag_engine.default_model = req.llm_model.strip()
     if req.similarity_threshold is not None:
         settings.SIMILARITY_THRESHOLD = req.similarity_threshold
         rag_engine.threshold = req.similarity_threshold
 
     return {
         "status": "success",
+        "llm_provider": settings.LLM_PROVIDER,
+        "groq_configured": bool(settings.GROQ_API_KEY),
+        "groq_model": settings.GROQ_MODEL,
         "hf_token_set": bool(settings.HF_TOKEN),
-        "llm_model": settings.DEFAULT_LLM_MODEL,
         "similarity_threshold": settings.SIMILARITY_THRESHOLD
     }

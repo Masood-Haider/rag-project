@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Key, Sliders, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { X, Key, Sliders, CheckCircle2, Zap } from 'lucide-react';
 
 export default function SettingsModal({
   isOpen,
@@ -10,37 +10,48 @@ export default function SettingsModal({
 }) {
   if (!isOpen) return null;
 
+  const [provider, setProvider] = useState(settingsConfig.llmProvider || 'groq');
+  const [groqApiKey, setGroqApiKey] = useState('');
+  const [groqModel, setGroqModel] = useState(settingsConfig.groqModel || 'qwen/qwen3.8-27b');
   const [hfToken, setHfToken] = useState('');
+  const [hfModel, setHfModel] = useState(settingsConfig.llmModel || 'deepseek-ai/DeepSeek-V3-0324');
   const [k, setK] = useState(settingsConfig.k || 5);
   const [useHybrid, setUseHybrid] = useState(settingsConfig.useHybrid || false);
   const [comparePlain, setComparePlain] = useState(settingsConfig.comparePlain !== false);
-  const [llmModel, setLlmModel] = useState(settingsConfig.llmModel || 'deepseek-ai/DeepSeek-V3-0324');
   const [threshold, setThreshold] = useState(settingsConfig.threshold || 0.40);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
-  const availableModels = [
-    { id: 'deepseek-ai/DeepSeek-V3-0324', name: 'DeepSeek-V3-0324 (Course Default)' },
-    { id: 'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B', name: 'DeepSeek R1 Distill Qwen' },
-    { id: 'meta-llama/Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B Instruct' },
-    { id: 'Qwen/Qwen2.5-72B-Instruct', name: 'Qwen 2.5 72B Instruct' }
+  // 100% Free models available on your Groq developer tier
+  const groqFreeModels = [
+    { id: 'qwen/qwen3.8-27b', name: 'Qwen 3.8 27B (Alibaba Cloud • Free & Fast)' },
+    { id: 'openai/gpt-oss-120b', name: 'OpenAI GPT-OSS 120B (High Capability • Free)' },
+    { id: 'openai/gpt-oss-20b', name: 'OpenAI GPT-OSS 20B (Lightweight • Free)' },
+    { id: 'allam-2-7b', name: 'Allam 2 7B (Free)' },
+    { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Versatile' },
+    { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant' }
   ];
 
   const handleSave = async () => {
-    // Save to local parent state
     onSaveSettings({
+      llmProvider: provider,
+      groqModel,
       k,
       useHybrid,
       comparePlain,
-      llmModel,
+      llmModel: provider === 'groq' ? groqModel : hfModel,
       threshold
     });
 
-    // If HF token was entered or threshold changed, post to backend
     try {
       const payload = {
+        llm_provider: provider,
+        groq_model: groqModel,
         similarity_threshold: threshold,
-        llm_model: llmModel
+        llm_model: hfModel
       };
+      if (groqApiKey.trim()) {
+        payload.groq_api_key = groqApiKey.trim();
+      }
       if (hfToken.trim()) {
         payload.hf_token = hfToken.trim();
       }
@@ -64,13 +75,13 @@ export default function SettingsModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl relative space-y-5">
+      <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl relative space-y-5 max-h-[90vh] overflow-y-auto">
         
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <Sliders className="w-5 h-5 text-blue-400" />
-            <h3 className="text-base font-bold text-white">RAG Hyperparameters & Settings</h3>
+            <h3 className="text-base font-bold text-white">RAG Hyperparameters & API Keys</h3>
           </div>
           <button
             onClick={onClose}
@@ -80,41 +91,112 @@ export default function SettingsModal({
           </button>
         </div>
 
-        {/* Hugging Face Token */}
+        {/* Provider Selector */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-            <Key className="w-3.5 h-3.5 text-blue-400" />
-            Hugging Face Access Token (HF_TOKEN)
-          </label>
-          <input
-            type="password"
-            value={hfToken}
-            onChange={(e) => setHfToken(e.target.value)}
-            placeholder="Paste hf_... token to enable live DeepSeek API"
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-          />
-          <p className="text-[11px] text-slate-400">
-            Never committed to Git. Saved securely into the running server session or your backend/.env.
-          </p>
+          <label className="text-xs font-semibold text-slate-300">LLM Provider</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setProvider('groq')}
+              className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-medium transition ${
+                provider === 'groq'
+                  ? 'bg-blue-600/20 border-blue-500 text-blue-300'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Zap className="w-4 h-4 text-amber-400" />
+              <span>Groq (Free Models)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setProvider('huggingface')}
+              className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-medium transition ${
+                provider === 'huggingface'
+                  ? 'bg-blue-600/20 border-blue-500 text-blue-300'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span>Hugging Face</span>
+            </button>
+          </div>
         </div>
 
-        {/* LLM Model Select */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-300">
-            Generation Model (DeepSeek / HF Inference)
-          </label>
-          <select
-            value={llmModel}
-            onChange={(e) => setLlmModel(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-          >
-            {availableModels.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Groq Configuration */}
+        {provider === 'groq' && (
+          <div className="space-y-3 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Key className="w-3.5 h-3.5 text-amber-400" />
+                  Groq API Key (GROQ_API_KEY)
+                </span>
+                <a
+                  href="https://console.groq.com/keys"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] text-blue-400 hover:underline"
+                >
+                  Get free key ↗
+                </a>
+              </label>
+              <input
+                type="password"
+                value={groqApiKey}
+                onChange={(e) => setGroqApiKey(e.target.value)}
+                placeholder="Paste gsk_... key from Groq Console"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+              />
+              <p className="text-[11px] text-slate-500">
+                You can also set this in <code>backend/.env</code> as <code>GROQ_API_KEY</code>.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Free Groq Model</label>
+              <select
+                value={groqModel}
+                onChange={(e) => setGroqModel(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              >
+                {groqFreeModels.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Hugging Face Configuration */}
+        {provider === 'huggingface' && (
+          <div className="space-y-3 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <Key className="w-3.5 h-3.5 text-blue-400" />
+                Hugging Face Token (HF_TOKEN)
+              </label>
+              <input
+                type="password"
+                value={hfToken}
+                onChange={(e) => setHfToken(e.target.value)}
+                placeholder="Paste hf_... token"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">HF Model Name</label>
+              <input
+                type="text"
+                value={hfModel}
+                onChange={(e) => setHfModel(e.target.value)}
+                placeholder="deepseek-ai/DeepSeek-V3-0324"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Top-K Slider */}
         <div className="space-y-1.5">
@@ -130,9 +212,6 @@ export default function SettingsModal({
             onChange={(e) => setK(parseInt(e.target.value))}
             className="w-full accent-blue-500"
           />
-          <p className="text-[11px] text-slate-500">
-            Notebook Step 4 compares k=3 vs k=5 vs k=10.
-          </p>
         </div>
 
         {/* Similarity Threshold */}
@@ -150,16 +229,13 @@ export default function SettingsModal({
             onChange={(e) => setThreshold(parseFloat(e.target.value))}
             className="w-full accent-blue-500"
           />
-          <p className="text-[11px] text-slate-500">
-            Default 0.40. Scores below this trigger the honest out-of-domain warning badge.
-          </p>
         </div>
 
         {/* Toggles */}
         <div className="pt-2 space-y-3 border-t border-slate-800/80">
           <label className="flex items-center justify-between cursor-pointer">
             <div>
-              <p className="text-xs font-semibold text-slate-200">Hybrid Search (Stretch Step 8)</p>
+              <p className="text-xs font-semibold text-slate-200">Hybrid Search</p>
               <p className="text-[11px] text-slate-400">Combine FAISS semantic search with TF-IDF keyword search</p>
             </div>
             <input
@@ -172,8 +248,8 @@ export default function SettingsModal({
 
           <label className="flex items-center justify-between cursor-pointer">
             <div>
-              <p className="text-xs font-semibold text-slate-200">Side-by-Side Plain Comparison</p>
-              <p className="text-[11px] text-slate-400">Notebook Step 6: With RAG vs Without RAG generation</p>
+              <p className="text-xs font-semibold text-slate-200">Side-by-Side Comparison</p>
+              <p className="text-[11px] text-slate-400">Generate both WITH RAG and WITHOUT RAG</p>
             </div>
             <input
               type="checkbox"
@@ -201,7 +277,7 @@ export default function SettingsModal({
             onClick={handleSave}
             className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition shadow-md shadow-blue-600/20"
           >
-            Save Changes
+            Save Settings
           </button>
         </div>
       </div>

@@ -18,7 +18,9 @@ export default function App() {
     k: 5,
     useHybrid: false,
     comparePlain: true,
-    llmModel: 'deepseek-ai/DeepSeek-V3-0324',
+    llmProvider: 'groq',
+    groqModel: 'qwen/qwen3.8-27b',
+    llmModel: 'qwen/qwen3.8-27b',
     threshold: 0.40
   });
 
@@ -28,6 +30,13 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setStats(data);
+        if (data.llm_model) {
+          setSettingsConfig(prev => ({
+            ...prev,
+            llmModel: data.llm_model,
+            llmProvider: data.llm_provider || 'groq'
+          }));
+        }
       }
     } catch (e) {
       console.warn("Backend not reached yet:", e);

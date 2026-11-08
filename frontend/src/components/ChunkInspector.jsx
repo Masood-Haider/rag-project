@@ -76,3 +76,4 @@ export default function ChunkInspector({ chunks, topScore, threshold, retrievalM
     </div>
   );
 }
+

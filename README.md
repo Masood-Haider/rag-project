@@ -105,7 +105,7 @@ Supported formats: `.txt`, `.md`, `.pdf`, `.csv`, `.json`.
 
 ## 🚀 Quickstart Guide
 
-### 1. Backend Setup (FastAPI)
+### 1. Backend Setup (FastAPI + Groq)
 
 ```bash
 # Navigate to backend
@@ -114,8 +114,9 @@ cd backend
 # Install dependencies
 pip install -r requirements.txt
 
-# (Optional) Add your Hugging Face Token in .env for live DeepSeek generation
+# Configure your free Groq API Key
 cp .env.example .env
+# Edit .env and set: GROQ_API_KEY=gsk_...
 
 # Run the server
 python run.py
@@ -138,6 +139,16 @@ npm install
 npm run dev
 ```
 > The frontend UI will be live at: **http://localhost:5173**
+
+---
+
+## ⚡ Groq Free Tier Integration
+
+This system is configured to use Groq's high-speed free tier:
+- **Default Model**: `qwen/qwen3.8-27b` (Ultra-fast, zero cost)
+- **Supported Free Models**: `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `allam-2-7b`, `llama-3.3-70b-versatile`
+- **Latency**: Sub-second responses with streaming/grounding.
+- **Key Security**: `GROQ_API_KEY` is loaded from `backend/.env` and is strictly ignored in `.gitignore` so your key is never pushed to GitHub.
 
 ---
 
@@ -198,3 +209,4 @@ Set the following environment variable in your backend hosting:
 
 ## 📜 License
 MIT License. Created for the RAG curriculum and portfolio deployment.
+

@@ -1,37 +1,43 @@
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 import os
+import requests
 from ..config import settings
 from .chunker import recursive_chunk
-from .document_loader import load_corpus, load_document
+from .document_loader import load_corpus
 from .embeddings import embedding_service
 from .vector_store import vector_store
 from .hybrid_retriever import hybrid_retriever
 
 class RAGEngine:
     def __init__(self):
-        self.default_model = settings.DEFAULT_LLM_MODEL
+        self.default_model = settings.GROQ_MODEL if settings.LLM_PROVIDER == "groq" else settings.DEFAULT_LLM_MODEL
         self.threshold = settings.SIMILARITY_THRESHOLD
-        self._init_llm_client()
+        self.groq_client = None
+        self.hf_client = None
+        self._init_llm_clients()
 
-    def _init_llm_client(self):
-        self.client = None
+    def _init_llm_clients(self):
+        """Initialize Groq and Hugging Face clients."""
+        # 1. Groq Client
+        if settings.GROQ_API_KEY:
+            try:
+                from groq import Groq
+                self.groq_client = Groq(api_key=settings.GROQ_API_KEY)
+                print(f"Groq client initialized with model: {settings.GROQ_MODEL}")
+            except Exception as e:
+                print(f"Could not load groq SDK ({e}), will use direct REST requests.")
+                self.groq_client = "rest"
+
+        # 2. Hugging Face Client
         if settings.HF_TOKEN:
             try:
                 from huggingface_hub import InferenceClient
-                self.client = InferenceClient(api_key=settings.HF_TOKEN)
-                print(f"Hugging Face InferenceClient initialized for model {self.default_model}")
+                self.hf_client = InferenceClient(api_key=settings.HF_TOKEN)
             except Exception as e:
-                print(f"Could not initialize HF InferenceClient: {e}")
+                print(f"Could not initialize HF client: {e}")
 
     def reindex_all(self, chunk_size: int = settings.DEFAULT_CHUNK_SIZE, chunk_overlap: int = settings.DEFAULT_CHUNK_OVERLAP) -> Dict[str, Any]:
-        """
-        Full ingestion pipeline:
-        1. Reads all documents in backend/data/corpus
-        2. Chunks recursively
-        3. Generates embeddings
-        4. Builds & persists FAISS vector index
-        5. Updates TF-IDF hybrid search matrix
-        """
+        """Ingest all documents in corpus, chunk, embed, and update FAISS index."""
         docs = load_corpus(settings.CORPUS_DIR)
         if not docs:
             return {
@@ -58,13 +64,8 @@ class RAGEngine:
                 "total_chunks": 0
             }
 
-        # Embed all chunks
         embeddings = embedding_service.embed(all_chunks)
-
-        # Store in FAISS
         vector_store.build_index(embeddings, all_chunks, all_sources)
-
-        # Update hybrid retriever
         hybrid_retriever.update_corpus()
 
         return {
@@ -98,16 +99,64 @@ class RAGEngine:
         )
         return prompt
 
-    def generate_llm_response(self, prompt: str, model_name: Optional[str] = None, temperature: float = settings.TEMPERATURE) -> str:
-        """Call DeepSeek or configured model on Hugging Face Inference API."""
-        model = model_name or self.default_model
-
-        if self.client is None and settings.HF_TOKEN:
-            self._init_llm_client()
-
-        if self.client is not None:
+    def _generate_with_groq(self, prompt: str, model_name: Optional[str] = None, temperature: float = settings.TEMPERATURE) -> str:
+        """Call Groq API using free tier models."""
+        model = model_name or settings.GROQ_MODEL or "llama-3.3-70b-versatile"
+        
+        # 1. Via Groq Python SDK
+        if self.groq_client and self.groq_client != "rest":
             try:
-                response = self.client.chat.completions.create(
+                chat_completion = self.groq_client.chat.completions.create(
+                    messages=[
+                        {"role": "system", "content": "You are a grounded RAG assistant. Rely strictly on provided context."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=800,
+                )
+                return chat_completion.choices[0].message.content.strip()
+            except Exception as e:
+                print(f"Groq SDK call failed: {e}, falling back to REST endpoint...")
+
+        # 2. Via Groq Direct REST API
+        if settings.GROQ_API_KEY:
+            try:
+                url = "https://api.groq.com/openai/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": "You are a grounded RAG assistant. Rely strictly on provided context."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": temperature,
+                    "max_tokens": 800
+                }
+                res = requests.post(url, headers=headers, json=payload, timeout=30)
+                if res.status_code == 200:
+                    data = res.json()
+                    return data["choices"][0]["message"]["content"].strip()
+                else:
+                    return f"[Groq API Error {res.status_code}]: {res.text}"
+            except Exception as e:
+                return f"[Groq Connection Error]: {str(e)}"
+
+        return (
+            "[Groq API Key Required]\n"
+            "Please add your free Groq API key in the backend/.env file (GROQ_API_KEY=gsk_...) or in the Web Settings.\n"
+            "You can get a 100% free API key instantly at: https://console.groq.com/keys"
+        )
+
+    def _generate_with_hf(self, prompt: str, model_name: Optional[str] = None, temperature: float = settings.TEMPERATURE) -> str:
+        """Call Hugging Face Inference API."""
+        model = model_name or settings.DEFAULT_LLM_MODEL
+        if self.hf_client is not None:
+            try:
+                response = self.hf_client.chat.completions.create(
                     model=model,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=600,
@@ -115,24 +164,26 @@ class RAGEngine:
                 )
                 return response.choices[0].message.content.strip()
             except Exception as e:
-                return f"[Generation Error from {model}]: {str(e)}. (Check if HF_TOKEN is valid and has access to {model})."
+                return f"[HF Generation Error from {model}]: {str(e)}"
 
-        return (
-            "[Mock Generation / Grounding Preview]\n"
-            "HF_TOKEN is not currently configured in backend/.env. "
-            "To generate live DeepSeek answers, add your Hugging Face token in Settings or backend/.env file.\n\n"
-            f"Grounding context successfully retrieved and formatted above!"
-        )
+        return "[HF_TOKEN not set] Please configure HF_TOKEN or GROQ_API_KEY."
+
+    def generate_llm_response(self, prompt: str, model_name: Optional[str] = None, temperature: float = settings.TEMPERATURE) -> str:
+        """Route generation to Groq (default) or Hugging Face."""
+        if settings.LLM_PROVIDER == "groq" or settings.GROQ_API_KEY:
+            return self._generate_with_groq(prompt, model_name=model_name, temperature=temperature)
+        elif settings.HF_TOKEN:
+            return self._generate_with_hf(prompt, model_name=model_name, temperature=temperature)
+        else:
+            return (
+                "Groq API Key is not set yet.\n\n"
+                "To generate live answers with the free Groq model (`llama-3.3-70b-versatile`), "
+                "paste your API key into `backend/.env` under `GROQ_API_KEY=` or open the Settings modal in the web app.\n\n"
+                "Get your free Groq API key at: https://console.groq.com/keys"
+            )
 
     def query(self, question: str, k: int = settings.DEFAULT_K, use_hybrid: bool = False, compare_plain: bool = False, model_name: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Execute full RAG pipeline:
-        1. Retrieval (Semantic or Hybrid)
-        2. Honest score evaluation (checks against 0.40 threshold)
-        3. Augmented Prompt building
-        4. Generation with DeepSeek
-        5. Optional Plain comparison (without context)
-        """
+        """Execute full RAG pipeline."""
         hits = self.retrieve_chunks(question, k=k, use_hybrid=use_hybrid)
         
         top_score = hits[0]["score"] if hits else 0.0
@@ -143,8 +194,9 @@ class RAGEngine:
 
         answer_without_rag = None
         if compare_plain:
-            # Plain query with no retrieved context
             answer_without_rag = self.generate_llm_response(question, model_name=model_name)
+
+        active_model = model_name or (settings.GROQ_MODEL if settings.LLM_PROVIDER == "groq" else settings.DEFAULT_LLM_MODEL)
 
         return {
             "question": question,
@@ -157,7 +209,8 @@ class RAGEngine:
             "is_low_confidence": is_low_confidence,
             "warning": "Top score is below confidence threshold (0.40). The documents may not contain the answer." if is_low_confidence else None,
             "retrieval_mode": "hybrid" if use_hybrid else "semantic_faiss",
-            "model_used": model_name or self.default_model
+            "model_used": active_model,
+            "llm_provider": settings.LLM_PROVIDER
         }
 
 rag_engine = RAGEngine()
