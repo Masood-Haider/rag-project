@@ -1,28 +1,22 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+      },
       colors: {
-        brand: {
-          50: '#f0f7ff',
-          100: '#e0effe',
-          200: '#b9dffd',
-          300: '#7cc2fd',
-          400: '#36a1fa',
-          500: '#0c85eb',
-          600: '#0067c8',
-          700: '#0152a3',
-          800: '#054685',
-          900: '#0a3a6e',
-          950: '#06254a',
+        zinc: {
+          950: '#09090b',
         }
       }
     },
   },
   plugins: [],
 }
-

@@ -33,19 +33,19 @@ export default function DocumentManager({
       if (res.ok) {
         setUploadMessage({
           type: 'success',
-          text: `Successfully uploaded ${data.uploaded_files.length} document(s) and rebuilt FAISS index!`
+          text: `Uploaded ${data.uploaded_files.length} document(s) and synchronized FAISS index.`
         });
         onRefreshDocs();
       } else {
         setUploadMessage({
           type: 'error',
-          text: data.detail || 'Failed to upload files.'
+          text: data.detail || 'Upload failed.'
         });
       }
     } catch (err) {
       setUploadMessage({
         type: 'error',
-        text: `Upload error: ${err.message}`
+        text: `Network error: ${err.message}`
       });
     } finally {
       setIsUploading(false);
@@ -54,7 +54,7 @@ export default function DocumentManager({
   };
 
   const handleDelete = async (filename) => {
-    if (!confirm(`Are you sure you want to delete ${filename}? The index will be rebuilt.`)) return;
+    if (!confirm(`Remove ${filename} and re-index corpus?`)) return;
 
     try {
       const res = await fetch(`${apiUrl}/documents/${encodeURIComponent(filename)}`, {
@@ -80,50 +80,49 @@ export default function DocumentManager({
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
-      {/* Top Banner / Explainer */}
-      <div className="bg-gradient-to-r from-slate-900 via-blue-950/40 to-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-bold text-white flex items-center gap-2">
-              <Folder className="w-5 h-5 text-blue-400" />
-              RAG Knowledge Base & Database Files
-            </h1>
-            <p className="text-sm text-slate-300 mt-1 max-w-2xl">
-              Upload your notes, guides, and database documents here. Every file uploaded is automatically cut into chunks with recursive chunking, embedded, and stored into the FAISS vector database.
-            </p>
-          </div>
-
-          <button
-            onClick={onReindex}
-            disabled={isReindexing}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800/60 text-white font-medium text-sm transition shadow-lg shadow-blue-600/20 whitespace-nowrap"
-          >
-            <RefreshCw className={`w-4 h-4 ${isReindexing ? 'animate-spin' : ''}`} />
-            <span>{isReindexing ? 'Rebuilding Index...' : 'Rebuild FAISS Index'}</span>
-          </button>
+    <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+      
+      {/* Header & Reindex Button */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-200 dark:border-zinc-800">
+        <div>
+          <h1 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">
+            Knowledge Corpus
+          </h1>
+          <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
+            Manage files referenced by the vector search index.
+          </p>
         </div>
 
-        {/* Local Folder Location Info */}
-        <div className="mt-4 pt-4 border-t border-slate-800/80 flex items-center gap-2 text-xs text-slate-400">
-          <HardDrive className="w-4 h-4 text-slate-500 flex-shrink-0" />
-          <span>Local Corpus Storage Path:</span>
-          <code className="bg-slate-950 px-2 py-0.5 rounded text-blue-300 border border-slate-800 truncate">
-            {corpusDirectory || 'backend/data/corpus'}
-          </code>
-        </div>
+        <button
+          onClick={onReindex}
+          disabled={isReindexing}
+          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 text-xs font-medium transition disabled:opacity-50"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isReindexing ? 'animate-spin' : ''}`} />
+          <span>{isReindexing ? 'Reindexing...' : 'Rebuild Index'}</span>
+        </button>
       </div>
 
-      {/* Drag & Drop Upload Zone */}
+      {/* Directory location indicator */}
+      <div className="px-3.5 py-2.5 rounded-lg bg-zinc-100/70 dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-400">
+        <div className="flex items-center gap-2 truncate">
+          <HardDrive className="w-4 h-4 text-zinc-600 dark:text-zinc-400 flex-shrink-0" />
+          <span className="font-medium text-zinc-700 dark:text-zinc-300">Local Directory:</span>
+          <code className="font-mono text-[11px] truncate">{corpusDirectory || 'backend/data/corpus'}</code>
+        </div>
+        <span className="text-[11px] text-zinc-600 dark:text-zinc-400 hidden sm:inline">Drop files directly here</span>
+      </div>
+
+      {/* Drag & Drop Upload Dropzone */}
       <div
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
+        className={`border border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
           isDragging
-            ? 'border-blue-500 bg-blue-500/10'
-            : 'border-slate-800 hover:border-slate-700 bg-slate-900/40 hover:bg-slate-900/70'
+            ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-100/50 dark:bg-zinc-900/50'
+            : 'border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900/30'
         }`}
       >
         <input
@@ -135,83 +134,71 @@ export default function DocumentManager({
           onChange={(e) => handleFileUpload(e.target.files)}
         />
         
-        <div className="flex flex-col items-center justify-center gap-3">
-          <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shadow-inner">
-            <UploadCloud className="w-7 h-7" />
+        <div className="flex flex-col items-center justify-center gap-2">
+          <UploadCloud className="w-6 h-6 text-zinc-600 dark:text-zinc-400" />
+          <div className="text-xs">
+            <span className="font-medium text-zinc-900 dark:text-zinc-100">
+              {isUploading ? 'Ingesting documents...' : 'Click to upload'}
+            </span>
+            <span className="text-zinc-600 dark:text-zinc-400"> or drag files here</span>
           </div>
-          <div>
-            <p className="text-base font-semibold text-white">
-              {isUploading ? 'Uploading and indexing...' : 'Click or drag database files to upload'}
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              Supports <span className="text-slate-300 font-medium">.txt, .md, .pdf, .csv, .json</span> documents
-            </p>
-          </div>
+          <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+            Accepts .txt, .pdf, .md, .csv, and .json
+          </p>
         </div>
       </div>
 
-      {/* Status Alert */}
+      {/* Upload Notification */}
       {uploadMessage && (
-        <div className={`p-4 rounded-xl flex items-center gap-3 text-sm border ${
+        <div className={`px-3 py-2 rounded-lg flex items-center gap-2 text-xs border ${
           uploadMessage.type === 'success'
-            ? 'bg-emerald-950/40 border-emerald-800 text-emerald-200'
-            : 'bg-rose-950/40 border-rose-800 text-rose-200'
+            ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+            : 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
         }`}>
           {uploadMessage.type === 'success' ? (
-            <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+            <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
           ) : (
-            <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0" />
+            <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 flex-shrink-0" />
           )}
           <span>{uploadMessage.text}</span>
         </div>
       )}
 
-      {/* Uploaded Documents Table */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-blue-400" />
-            <h2 className="font-semibold text-white text-sm">Indexed Documents in Corpus</h2>
-          </div>
-          <span className="text-xs text-slate-400">
-            {documents.length} document{documents.length !== 1 ? 's' : ''} total
-          </span>
+      {/* Documents List */}
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-xs">
+        <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs font-medium text-zinc-600 dark:text-zinc-400">
+          <span>Files in Corpus</span>
+          <span>{documents.length} document{documents.length !== 1 ? 's' : ''}</span>
         </div>
 
         {documents.length === 0 ? (
-          <div className="p-12 text-center text-slate-500">
-            <Folder className="w-10 h-10 mx-auto text-slate-600 mb-2" />
-            <p className="text-sm">No documents found in corpus.</p>
-            <p className="text-xs text-slate-600 mt-1">Upload a .txt or .pdf file above to get started.</p>
+          <div className="p-8 text-center text-zinc-600 dark:text-zinc-400 text-xs">
+            No documents in corpus. Upload files above to index knowledge.
           </div>
         ) : (
-          <div className="divide-y divide-slate-800/80">
+          <div className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
             {documents.map((doc) => (
               <div
                 key={doc.filename}
-                className="px-6 py-4 flex items-center justify-between hover:bg-slate-800/30 transition"
+                className="px-4 py-3 flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition text-xs"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center text-slate-300 flex-shrink-0">
-                    <FileText className="w-4 h-4" />
-                  </div>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <FileText className="w-4 h-4 text-zinc-600 dark:text-zinc-400 flex-shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-200 truncate">{doc.filename}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {doc.size_kb} KB • {doc.char_count?.toLocaleString()} characters • Modified {doc.last_modified}
+                    <p className="font-medium text-zinc-900 dark:text-zinc-100 truncate">{doc.filename}</p>
+                    <p className="text-[11px] text-zinc-600 dark:text-zinc-400 font-mono mt-0.5">
+                      {doc.size_kb} KB • {doc.char_count?.toLocaleString()} chars • {doc.last_modified}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleDelete(doc.filename)}
-                    className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
-                    title="Delete document and rebuild index"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                <button
+                  onClick={() => handleDelete(doc.filename)}
+                  className="p-1.5 text-zinc-600 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 rounded-md transition"
+                  title="Delete file"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             ))}
           </div>
@@ -220,4 +207,3 @@ export default function DocumentManager({
     </div>
   );
 }
-

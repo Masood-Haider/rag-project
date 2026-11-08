@@ -1,79 +1,96 @@
 import React from 'react';
-import { Database, MessageSquare, Sliders, Cpu, Zap } from 'lucide-react';
+import { Database, MessageSquare, Sliders, Sun, Moon, Layers } from 'lucide-react';
 
-export default function Navbar({ activeTab, setActiveTab, stats, onOpenSettings }) {
-  const isGroq = stats?.llm_provider === 'groq';
-
+export default function Navbar({
+  activeTab,
+  setActiveTab,
+  stats,
+  onOpenSettings,
+  theme,
+  onToggleTheme
+}) {
   return (
-    <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <header className="border-b border-zinc-200 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-950/80 backdrop-blur sticky top-0 z-40 transition-colors">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
         
-        {/* Brand / Logo */}
+        {/* Professional Minimalist Logo */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
-            <Cpu className="w-5 h-5 text-white" />
+          <div className="w-8 h-8 rounded-lg bg-zinc-900 dark:bg-zinc-100 flex items-center justify-center text-white dark:text-zinc-950 shadow-sm">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 6h16M4 12h10M4 18h14" />
+            </svg>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-lg tracking-tight text-white">RAG Studio</span>
-              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
-                {isGroq ? <Zap className="w-3 h-3 text-amber-400" /> : null}
-                {isGroq ? 'Groq + FAISS' : 'FAISS + DeepSeek'}
-              </span>
-            </div>
-            <p className="text-xs text-slate-400">
-              {stats?.llm_model ? `Model: ${stats.llm_model}` : 'Week 8 RAG Grounded System'}
-            </p>
+          <div className="flex items-baseline gap-2">
+            <span className="font-semibold text-sm tracking-tight text-zinc-900 dark:text-zinc-100">
+              Nexus
+            </span>
+            <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+              RAG Engine
+            </span>
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <nav className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800">
+        {/* Minimalist Segmented Tabs */}
+        <nav className="flex items-center p-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800">
           <button
             onClick={() => setActiveTab('chat')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
               activeTab === 'chat'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
             }`}
           >
-            <MessageSquare className="w-4 h-4" />
-            <span>Chat & Grounding</span>
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Workspace</span>
           </button>
 
           <button
             onClick={() => setActiveTab('docs')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
               activeTab === 'docs'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
             }`}
           >
-            <Database className="w-4 h-4" />
-            <span>Database Files</span>
+            <Database className="w-3.5 h-3.5" />
+            <span>Documents</span>
             {stats && (
-              <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300">
+              <span className="ml-1 text-[10px] px-1.5 py-0.2 rounded bg-zinc-200/60 dark:bg-zinc-700/60 text-zinc-600 dark:text-zinc-300 font-mono">
                 {stats.total_documents}
               </span>
             )}
           </button>
         </nav>
 
-        {/* Status Indicators & Settings */}
-        <div className="flex items-center gap-3">
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="text-slate-300">
-              {stats ? `${stats.total_chunks} Chunks in FAISS` : 'Connecting...'}
+        {/* Right Actions: System Indicator, Theme Toggle, Settings */}
+        <div className="flex items-center gap-2">
+          {/* Index Counter */}
+          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-md bg-zinc-100/70 dark:bg-zinc-900/70 border border-zinc-200/60 dark:border-zinc-800/80 text-[11px] text-zinc-600 dark:text-zinc-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            <span className="font-mono">
+              {stats ? `${stats.total_chunks} chunks` : 'Connecting...'}
             </span>
           </div>
 
+          {/* Theme Toggle (Light / Dark) */}
+          <button
+            onClick={onToggleTheme}
+            className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-900 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-800 transition"
+            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} mode`}
+          >
+            {theme === 'dark' ? (
+              <Sun className="w-4 h-4 text-zinc-300" />
+            ) : (
+              <Moon className="w-4 h-4 text-zinc-600" />
+            )}
+          </button>
+
+          {/* Settings Button */}
           <button
             onClick={onOpenSettings}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800/70 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60 transition text-sm"
-            title="System Settings & Hyperparameters"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-100 hover:bg-zinc-200/70 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 transition"
           >
-            <Sliders className="w-4 h-4" />
+            <Sliders className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Settings</span>
           </button>
         </div>

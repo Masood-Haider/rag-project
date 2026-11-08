@@ -14,6 +14,24 @@ export default function App() {
   const [isReindexing, setIsReindexing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
+  // Default to light theme, persist user preference
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('nexus_theme') || 'light';
+  });
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('nexus_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
   const [settingsConfig, setSettingsConfig] = useState({
     k: 5,
     useHybrid: false,
@@ -83,13 +101,15 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      {/* Top Navbar */}
+    <div className="min-h-screen bg-[#fafafa] dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-150">
+      {/* Top Minimalist Navigation Bar */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         stats={stats}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       {/* Main Content Area */}
@@ -116,7 +136,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Settings Modal */}
+      {/* Settings Dialog Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
