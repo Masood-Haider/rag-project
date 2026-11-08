@@ -1,32 +1,47 @@
 import os
+import shutil
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load .env file from backend root or parent
+# Load .env file from root or backend
 load_dotenv()
-env_path = Path(__file__).resolve().parent.parent / ".env"
-if env_path.exists():
-    load_dotenv(dotenv_path=env_path)
+root_env = Path(__file__).resolve().parent.parent.parent / ".env"
+if root_env.exists():
+    load_dotenv(dotenv_path=root_env)
+backend_env = Path(__file__).resolve().parent.parent / ".env"
+if backend_env.exists():
+    load_dotenv(dotenv_path=backend_env)
 
 class Settings:
     PROJECT_NAME: str = "Nexus RAG System"
     VERSION: str = "1.0.0"
     API_PREFIX: str = "/api"
 
+    # Detect Vercel serverless environment
+    IS_VERCEL: bool = bool(os.getenv("VERCEL") or os.getenv("VERCEL_ENV") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+
     # Base paths
     BACKEND_DIR: Path = Path(__file__).resolve().parent.parent
-    CORPUS_DIR: Path = Path(os.getenv("CORPUS_DIR", BACKEND_DIR / "data" / "corpus"))
-    STORAGE_DIR: Path = Path(os.getenv("STORAGE_DIR", BACKEND_DIR / "data" / "storage"))
-    SESSIONS_DIR: Path = Path(os.getenv("SESSIONS_DIR", BACKEND_DIR / "data" / "sessions"))
+    BUNDLED_CORPUS_DIR: Path = BACKEND_DIR / "data" / "corpus"
 
-    # Admin access password for permanent corpus uploads
-    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "change_this_admin_password_123")
+    if IS_VERCEL:
+        # Vercel serverless has a read-only filesystem except /tmp
+        CORPUS_DIR: Path = Path("/tmp/nexus_corpus")
+        STORAGE_DIR: Path = Path("/tmp/nexus_storage")
+        SESSIONS_DIR: Path = Path("/tmp/nexus_sessions")
+    else:
+        CORPUS_DIR: Path = Path(os.getenv("CORPUS_DIR", BACKEND_DIR / "data" / "corpus"))
+        STORAGE_DIR: Path = Path(os.getenv("STORAGE_DIR", BACKEND_DIR / "data" / "storage"))
+        SESSIONS_DIR: Path = Path(os.getenv("SESSIONS_DIR", BACKEND_DIR / "data" / "sessions"))
 
-    # Groq Settings (Server-side ONLY - never exposed to frontend)
+    # Admin Access Password (hardcoded fallback or env)
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "1112")
+
+    # Groq Settings (Server-side ONLY)
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 
-    # Embedding settings (Local sentence-transformers / FAISS)
+    # Embedding settings
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
     EMBEDDING_DIMENSION: int = 384
 
@@ -38,18 +53,22 @@ class Settings:
     TEMPERATURE: float = float(os.getenv("TEMPERATURE", 0.2))
 
     # CORS
-    CORS_ORIGINS: list[str] = [
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
-        "https://*.vercel.app",
-        "*"
-    ]
+    CORS_ORIGINS: list[str] = ["*"]
 
 settings = Settings()
 
-# Ensure directories exist
-settings.CORPUS_DIR.mkdir(parents=True, exist_ok=True)
-settings.STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-settings.SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+# Ensure directories exist and copy bundled files on Vercel
+try:
+    settings.CORPUS_DIR.mkdir(parents=True, exist_ok=True)
+    settings.STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    settings.SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # In Vercel, copy bundled starter documents to /tmp/nexus_corpus so they can be read & indexed
+    if settings.IS_VERCEL and settings.BUNDLED_CORPUS_DIR.exists():
+        for f in settings.BUNDLED_CORPUS_DIR.iterdir():
+            if f.is_file():
+                dest = settings.CORPUS_DIR / f.name
+                if not dest.exists():
+                    shutil.copy2(f, dest)
+except Exception as e:
+    print(f"Directory initialization notice: {e}")
