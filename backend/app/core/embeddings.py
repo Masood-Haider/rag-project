@@ -71,18 +71,34 @@ class EmbeddingService:
 
     def _synthetic_embed(self, texts: List[str]) -> np.ndarray:
         """
-        Ultra-lightweight deterministic feature hashing vectorizer.
+        Ultra-lightweight deterministic feature hashing vectorizer with stopword filtering.
         Zero dependency on scikit-learn or scipy (fits easily in Vercel Serverless limit).
         """
         import hashlib
         import re
+
+        stopwords = {
+            "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "aren",
+            "as", "at", "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", "can",
+            "cannot", "could", "did", "do", "does", "doing", "down", "during", "each", "few", "for", "from",
+            "further", "had", "has", "have", "having", "he", "her", "here", "hers", "herself", "him", "himself",
+            "his", "how", "i", "if", "in", "into", "is", "it", "its", "itself", "just", "ll", "m", "me", "might",
+            "more", "most", "must", "my", "myself", "no", "nor", "not", "now", "o", "of", "off", "on", "once",
+            "only", "or", "other", "our", "ours", "ourselves", "out", "over", "own", "re", "s", "same", "she",
+            "should", "so", "some", "such", "t", "than", "that", "the", "their", "theirs", "them", "themselves",
+            "then", "there", "these", "they", "this", "those", "through", "to", "too", "under", "until", "up",
+            "ve", "very", "was", "wasn", "we", "were", "what", "when", "where", "which", "while", "who", "whom",
+            "why", "will", "with", "won", "would", "you", "your", "yours", "yourself", "yourselves"
+        }
 
         vectors = []
         token_pat = re.compile(r"(?u)\b\w\w+\b")
         for text in texts:
             vec = np.zeros(self.dimension, dtype="float32")
             tokens = token_pat.findall(text.lower())
-            for tok in tokens:
+            meaningful = [t for t in tokens if t not in stopwords]
+            toks_to_use = meaningful if meaningful else tokens
+            for tok in toks_to_use:
                 h = int(hashlib.md5(tok.encode("utf-8")).hexdigest()[:8], 16)
                 idx = h % self.dimension
                 vec[idx] += 1.0

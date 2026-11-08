@@ -85,7 +85,7 @@ export default function App() {
     comparePlain: false,
     groqModel: 'qwen/qwen3.8-27b',
     llmModel: 'qwen/qwen3.8-27b',
-    threshold: 0.40,
+    threshold: 0.20,
     chunkSize: 300,
     chunkOverlap: 50
   });

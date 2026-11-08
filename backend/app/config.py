@@ -54,7 +54,7 @@ class Settings:
     DEFAULT_CHUNK_SIZE: int = int(os.getenv("DEFAULT_CHUNK_SIZE", 300))
     DEFAULT_CHUNK_OVERLAP: int = int(os.getenv("DEFAULT_CHUNK_OVERLAP", 50))
     DEFAULT_K: int = int(os.getenv("DEFAULT_K", 5))
-    SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", 0.40))
+    SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", 0.20))
     TEMPERATURE: float = float(os.getenv("TEMPERATURE", 0.2))
 
     # CORS
