@@ -23,8 +23,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount API routes
-app.include_router(api_router, prefix=settings.API_PREFIX)
+# Mount API routes both at /api and root / to support direct and proxy/rewrite requests
+app.include_router(api_router, prefix="/api")
+app.include_router(api_router, prefix="")
 
 @app.on_event("startup")
 def startup_event():

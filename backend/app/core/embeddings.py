@@ -70,12 +70,29 @@ class EmbeddingService:
             return self._synthetic_embed(texts)
 
     def _synthetic_embed(self, texts: List[str]) -> np.ndarray:
-        """Local deterministic feature hashing vectorizer."""
-        from sklearn.feature_extraction.text import HashingVectorizer
-        hv = HashingVectorizer(n_features=self.dimension, alternate_sign=False)
-        dense = hv.fit_transform(texts).toarray()
-        norms = np.linalg.norm(dense, axis=1, keepdims=True)
-        norms[norms == 0] = 1.0
-        return (dense / norms).astype("float32")
+        """
+        Ultra-lightweight deterministic feature hashing vectorizer.
+        Zero dependency on scikit-learn or scipy (fits easily in Vercel Serverless limit).
+        """
+        import hashlib
+        import re
+
+        vectors = []
+        token_pat = re.compile(r"(?u)\b\w\w+\b")
+        for text in texts:
+            vec = np.zeros(self.dimension, dtype="float32")
+            tokens = token_pat.findall(text.lower())
+            for tok in tokens:
+                h = int(hashlib.md5(tok.encode("utf-8")).hexdigest()[:8], 16)
+                idx = h % self.dimension
+                vec[idx] += 1.0
+            norm = np.linalg.norm(vec)
+            if norm > 0:
+                vec /= norm
+            vectors.append(vec)
+
+        if not vectors:
+            return np.zeros((0, self.dimension), dtype="float32")
+        return np.array(vectors, dtype="float32")
 
 embedding_service = EmbeddingService()

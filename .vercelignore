@@ -1,0 +1,9 @@
+# Ignore test files and scratch scripts
+backend/tests/
+backend/data/sessions/
+backend/data/storage/
+scratch/
+.system_generated/
+*.ipynb
+*.png
+*.jpg
