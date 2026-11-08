@@ -26,6 +26,9 @@ jobs:
           pip install pytest httpx
 
       - name: Run Backend Tests
+        env:
+          ADMIN_PASSWORD: "ci_test_password"
+          GROQ_API_KEY: "ci_test_key"
         run: |
           pytest backend/tests/ -v
 

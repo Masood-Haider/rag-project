@@ -94,28 +94,33 @@ def test_settings_admin_vs_guest():
 
     client = TestClient(app)
     orig_chunk_size = settings.DEFAULT_CHUNK_SIZE
+    orig_admin_pw = settings.ADMIN_PASSWORD
 
-    # 1. Guest update: should NOT modify global settings
-    guest_res = client.post("/api/settings", json={"chunk_size": 280, "chunk_overlap": 30, "session_id": "test_guest_session"})
-    assert guest_res.status_code == 200
-    guest_data = guest_res.json()
-    assert guest_data["is_admin"] is False
-    assert guest_data["chunk_size"] == 280
-    assert settings.DEFAULT_CHUNK_SIZE == orig_chunk_size
+    try:
+        # Explicit test password ensures CI passes even when .env is absent
+        settings.ADMIN_PASSWORD = "ci_test_admin_pw_1112"
 
-    # 2. Admin update: SHOULD modify global settings
-    admin_pw = settings.ADMIN_PASSWORD
-    admin_res = client.post(
-        "/api/settings",
-        json={"chunk_size": 320, "chunk_overlap": 40},
-        headers={"x-admin-password": admin_pw}
-    )
-    assert admin_res.status_code == 200
-    admin_data = admin_res.json()
-    assert admin_data["is_admin"] is True
-    assert admin_data["chunk_size"] == 320
-    assert settings.DEFAULT_CHUNK_SIZE == 320
+        # 1. Guest update: should NOT modify global settings
+        guest_res = client.post("/api/settings", json={"chunk_size": 280, "chunk_overlap": 30, "session_id": "test_guest_session"})
+        assert guest_res.status_code == 200
+        guest_data = guest_res.json()
+        assert guest_data["is_admin"] is False
+        assert guest_data["chunk_size"] == 280
+        assert settings.DEFAULT_CHUNK_SIZE == orig_chunk_size
 
-    # Restore default
-    settings.DEFAULT_CHUNK_SIZE = orig_chunk_size
+        # 2. Admin update: SHOULD modify global settings
+        admin_res = client.post(
+            "/api/settings",
+            json={"chunk_size": 320, "chunk_overlap": 40},
+            headers={"x-admin-password": "ci_test_admin_pw_1112"}
+        )
+        assert admin_res.status_code == 200
+        admin_data = admin_res.json()
+        assert admin_data["is_admin"] is True
+        assert admin_data["chunk_size"] == 320
+        assert settings.DEFAULT_CHUNK_SIZE == 320
+    finally:
+        # Restore defaults
+        settings.DEFAULT_CHUNK_SIZE = orig_chunk_size
+        settings.ADMIN_PASSWORD = orig_admin_pw
 
