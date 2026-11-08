@@ -166,14 +166,22 @@ def get_stats(
 
 @router.post("/query", response_model=QueryResponse)
 def query_rag(req: QueryRequest):
-    if vector_store.total_vectors == 0:
+    has_session_docs = False
+    if req.session_id:
+        try:
+            session_dir = session_manager.get_session_corpus_dir(req.session_id)
+            has_session_docs = any(session_dir.iterdir())
+        except Exception:
+            has_session_docs = False
+
+    if vector_store.total_vectors == 0 and not has_session_docs:
         docs = load_corpus(settings.CORPUS_DIR)
         if docs:
             rag_engine.reindex_all()
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No documents have been indexed yet."
+                detail="No documents have been indexed yet. Please upload files or add documents to backend/data/corpus."
             )
 
     result = rag_engine.query(

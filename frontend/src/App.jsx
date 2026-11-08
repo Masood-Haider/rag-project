@@ -197,10 +197,6 @@ export default function App() {
             isReindexing={isReindexing}
             apiUrl={API_BASE}
             sessionId={sessionId}
-            isAdmin={isAdmin}
-            setIsAdmin={handleSetIsAdmin}
-            adminPassword={adminPassword}
-            setAdminPassword={handleSetAdminPassword}
             stats={stats}
           />
         )}
