@@ -36,6 +36,81 @@ def _check_admin(password: Optional[str]) -> bool:
     provided = str(password).strip().strip('"').strip("'")
     return provided == expected
 
+def _commit_to_github_repo(filename: str, content_bytes: bytes) -> tuple[bool, str]:
+    token = settings.GITHUB_TOKEN.strip()
+    repo = settings.GITHUB_REPO.strip()
+    branch = settings.GITHUB_BRANCH.strip()
+    if not token or not repo:
+        return False, "GITHUB_TOKEN not set"
+
+    import base64
+    import requests
+
+    url = f"https://api.github.com/repos/{repo}/contents/backend/data/corpus/{filename}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+
+    sha = None
+    try:
+        r_get = requests.get(url, headers=headers, timeout=10)
+        if r_get.status_code == 200:
+            sha = r_get.json().get("sha")
+    except Exception as e:
+        return False, f"GitHub check error: {e}"
+
+    payload = {
+        "message": f"feat(corpus): add {filename} via admin upload",
+        "content": base64.b64encode(content_bytes).decode("utf-8"),
+        "branch": branch
+    }
+    if sha:
+        payload["sha"] = sha
+        payload["message"] = f"feat(corpus): update {filename} via admin upload"
+
+    try:
+        r_put = requests.put(url, headers=headers, json=payload, timeout=15)
+        if r_put.status_code in (200, 201):
+            return True, f"Committed to GitHub ({repo}@{branch})"
+        return False, f"GitHub error ({r_put.status_code})"
+    except Exception as e:
+        return False, f"GitHub commit error: {e}"
+
+def _delete_from_github_repo(filename: str) -> tuple[bool, str]:
+    token = settings.GITHUB_TOKEN.strip()
+    repo = settings.GITHUB_REPO.strip()
+    branch = settings.GITHUB_BRANCH.strip()
+    if not token or not repo:
+        return False, "GITHUB_TOKEN not set"
+
+    import requests
+
+    url = f"https://api.github.com/repos/{repo}/contents/backend/data/corpus/{filename}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+
+    try:
+        r_get = requests.get(url, headers=headers, timeout=10)
+        if r_get.status_code == 200:
+            sha = r_get.json().get("sha")
+            payload = {
+                "message": f"chore(corpus): delete {filename} via admin",
+                "sha": sha,
+                "branch": branch
+            }
+            r_del = requests.delete(url, headers=headers, json=payload, timeout=15)
+            if r_del.status_code in (200, 204):
+                return True, f"Deleted from GitHub ({repo}@{branch})"
+            return False, f"GitHub delete error ({r_del.status_code})"
+        return False, "File not on GitHub"
+    except Exception as e:
+        return False, f"GitHub delete error: {e}"
+
 @router.post("/admin/verify", response_model=AdminVerifyResponse)
 def verify_admin(req: AdminVerifyRequest):
     if _check_admin(req.password):
@@ -141,23 +216,35 @@ async def upload_documents(
     if is_admin:
         # Permanent storage
         target_dir = settings.CORPUS_DIR
+        github_sync = []
         for file in files:
             try:
                 dest = target_dir / file.filename
+                content_bytes = file.file.read()
                 with open(dest, "wb") as buffer:
-                    shutil.copyfileobj(file.file, buffer)
+                    buffer.write(content_bytes)
                 saved_files.append(file.filename)
+
+                # Direct sync to GitHub repository if GITHUB_TOKEN is set
+                if settings.GITHUB_TOKEN:
+                    gh_ok, gh_msg = _commit_to_github_repo(file.filename, content_bytes)
+                    github_sync.append({"file": file.filename, "synced": gh_ok, "details": gh_msg})
             except Exception as e:
                 errors.append({"file": file.filename, "error": str(e)})
 
         reindex_result = rag_engine.reindex_all()
+        msg = f"Admin: Added {len(saved_files)} file(s) permanently."
+        if github_sync:
+            msg += f" Synced {len([s for s in github_sync if s['synced']])} file(s) to GitHub repo."
+
         return {
             "status": "success",
             "is_permanent": True,
             "uploaded_files": saved_files,
+            "github_sync": github_sync,
             "errors": errors,
             "reindex_result": reindex_result,
-            "message": f"Admin: Successfully added {len(saved_files)} file(s) permanently."
+            "message": msg
         }
     else:
         # Temporary guest session storage
@@ -207,7 +294,10 @@ def delete_document(
         raise HTTPException(status_code=404, detail="File not found")
 
     try:
-        os.remove(target)
+        if target.exists():
+            os.remove(target)
+        if settings.GITHUB_TOKEN:
+            _delete_from_github_repo(filename)
         reindex_result = rag_engine.reindex_all()
         return {"status": "success", "message": f"Deleted permanent file {filename}.", "reindex_result": reindex_result}
     except Exception as e:

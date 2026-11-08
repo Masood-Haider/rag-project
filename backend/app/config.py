@@ -37,6 +37,11 @@ class Settings:
     # Admin Access Password (hardcoded fallback or env)
     ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "1112")
 
+    # GitHub Direct Sync (Auto-commits admin file uploads directly to GitHub repo)
+    GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
+    GITHUB_REPO: str = os.getenv("GITHUB_REPO", "Masood-Haider/rag-project")
+    GITHUB_BRANCH: str = os.getenv("GITHUB_BRANCH", "main")
+
     # Groq Settings (Server-side ONLY)
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
