@@ -1,6 +1,80 @@
 import React, { useState } from 'react';
-import { ArrowUp, FileText, AlertCircle, Copy, Check, ChevronDown, ChevronUp, Sparkles, Terminal } from 'lucide-react';
+import { ArrowUp, FileText, AlertCircle, Copy, Check, ChevronDown, ChevronUp, Sparkles, Terminal, Download, Trash2 } from 'lucide-react';
 import ChunkInspector from './ChunkInspector';
+
+// Lightweight, clean Markdown & Code renderer without heavy dependencies
+function FormattedMessage({ text }) {
+  if (!text) return null;
+
+  // Split by code blocks
+  const parts = text.split(/(```[\s\S]*?```)/g);
+
+  return (
+    <div className="space-y-2">
+      {parts.map((part, index) => {
+        if (part.startsWith('```')) {
+          const lines = part.slice(3, -3).trim().split('\n');
+          const lang = lines[0].match(/^[a-zA-Z0-9_-]+$/) ? lines[0] : '';
+          const code = lang ? lines.slice(1).join('\n') : lines.join('\n');
+
+          return (
+            <div key={index} className="my-2 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 font-mono text-xs">
+              {lang && (
+                <div className="px-3 py-1 bg-zinc-100 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-500 uppercase font-semibold">
+                  {lang}
+                </div>
+              )}
+              <pre className="p-3 overflow-x-auto text-zinc-800 dark:text-zinc-200 leading-relaxed">
+                <code>{code}</code>
+              </pre>
+            </div>
+          );
+        }
+
+        // Parse paragraphs, bold text, bullet points
+        const paragraphs = part.split(/\n\n+/);
+        return paragraphs.map((para, pIdx) => {
+          const lines = para.split('\n');
+          return (
+            <p key={`${index}-${pIdx}`} className="leading-relaxed">
+              {lines.map((line, lIdx) => {
+                const trimmed = line.trim();
+                const isBullet = trimmed.startsWith('- ') || trimmed.startsWith('* ');
+                const content = isBullet ? trimmed.slice(2) : line;
+
+                // Simple inline bold and code formatting
+                const formattedContent = content.split(/(\*\*.*?\*\*|`.*?`)/g).map((sub, sIdx) => {
+                  if (sub.startsWith('**') && sub.endsWith('**')) {
+                    return <strong key={sIdx} className="font-semibold text-zinc-900 dark:text-zinc-100">{sub.slice(2, -2)}</strong>;
+                  }
+                  if (sub.startsWith('`') && sub.endsWith('`')) {
+                    return <code key={sIdx} className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 font-mono text-[12px] border border-zinc-200/60 dark:border-zinc-700/60">{sub.slice(1, -1)}</code>;
+                  }
+                  return sub;
+                });
+
+                if (isBullet) {
+                  return (
+                    <span key={lIdx} className="block pl-4 relative before:content-['•'] before:absolute before:left-1 before:text-zinc-400">
+                      {formattedContent}
+                    </span>
+                  );
+                }
+
+                return (
+                  <React.Fragment key={lIdx}>
+                    {formattedContent}
+                    {lIdx < lines.length - 1 && <br />}
+                  </React.Fragment>
+                );
+              })}
+            </p>
+          );
+        });
+      })}
+    </div>
+  );
+}
 
 export default function ChatView({ apiUrl, settingsConfig }) {
   const [question, setQuestion] = useState('');
@@ -85,9 +159,65 @@ export default function ChatView({ apiUrl, settingsConfig }) {
     setTimeout(() => setCopiedIdx(null), 2000);
   };
 
+  const exportChat = () => {
+    const markdown = messages.map(m => {
+      const sender = m.role === 'user' ? '### User' : '### Assistant';
+      const sources = m.result?.sources?.length ? `\n\n*Sources: ${m.result.sources.join(', ')}*` : '';
+      return `${sender}\n${m.content}${sources}\n`;
+    }).join('\n---\n\n');
+
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rag-qa-session-${new Date().toISOString().slice(0, 10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const clearChat = () => {
+    setMessages([
+      {
+        role: 'assistant',
+        content: 'System ready. Ask any question against your indexed documents. Answers are strictly grounded in retrieved vector chunks.',
+        result: null
+      }
+    ]);
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 flex flex-col h-[calc(100vh-3.5rem)]">
       
+      {/* Top Session Actions (Export, Clear) */}
+      <div className="flex items-center justify-between pb-2 mb-2 text-xs border-b border-zinc-100 dark:border-zinc-800/60">
+        <span className="text-[11px] font-mono text-zinc-500 uppercase tracking-wider">
+          Query Session
+        </span>
+        <div className="flex items-center gap-2">
+          {messages.length > 1 && (
+            <>
+              <button
+                onClick={exportChat}
+                className="flex items-center gap-1 text-[11px] text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 transition"
+                title="Export session to Markdown"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export .md</span>
+              </button>
+              <span className="text-zinc-300 dark:text-zinc-700">•</span>
+              <button
+                onClick={clearChat}
+                className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-rose-600 dark:hover:text-rose-400 transition"
+                title="Clear conversation"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Clear</span>
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* Messages Stream */}
       <div className="flex-1 overflow-y-auto space-y-5 pr-1 mb-3">
         {messages.map((msg, idx) => (
@@ -130,8 +260,14 @@ export default function ChatView({ apiUrl, settingsConfig }) {
                 </div>
               )}
 
-              {/* Message Content */}
-              <div className="whitespace-pre-wrap">{msg.content}</div>
+              {/* Message Content with Markdown parsing */}
+              <div className="text-[13.5px]">
+                {msg.role === 'user' ? (
+                  <div className="whitespace-pre-wrap">{msg.content}</div>
+                ) : (
+                  <FormattedMessage text={msg.content} />
+                )}
+              </div>
 
               {/* Grounded Sources */}
               {msg.result?.sources?.length > 0 && (

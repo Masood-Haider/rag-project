@@ -9,7 +9,7 @@ if env_path.exists():
     load_dotenv(dotenv_path=env_path)
 
 class Settings:
-    PROJECT_NAME: str = "Production RAG System"
+    PROJECT_NAME: str = "Nexus RAG System"
     VERSION: str = "1.0.0"
     API_PREFIX: str = "/api"
 
@@ -18,23 +18,15 @@ class Settings:
     CORPUS_DIR: Path = Path(os.getenv("CORPUS_DIR", BACKEND_DIR / "data" / "corpus"))
     STORAGE_DIR: Path = Path(os.getenv("STORAGE_DIR", BACKEND_DIR / "data" / "storage"))
 
-    # LLM Provider: "groq" or "huggingface"
-    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "groq")
-
-    # Groq Settings (Free tier models)
+    # Groq Settings (Server-side ONLY - never exposed or set via frontend)
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 
-    # Hugging Face Settings (Fallback/alternative)
-    HF_TOKEN: str = os.getenv("HF_TOKEN", "")
-    DEFAULT_LLM_MODEL: str = os.getenv("LLM_MODEL", "deepseek-ai/DeepSeek-V3-0324")
-
-    # Embedding settings
+    # Embedding settings (Local sentence-transformers / FAISS)
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
     EMBEDDING_DIMENSION: int = 384
-    EMBEDDING_PROVIDER: str = os.getenv("EMBEDDING_PROVIDER", "auto")
 
-    # RAG defaults from notebook
+    # RAG Hyperparameters
     DEFAULT_CHUNK_SIZE: int = int(os.getenv("DEFAULT_CHUNK_SIZE", 300))
     DEFAULT_CHUNK_OVERLAP: int = int(os.getenv("DEFAULT_CHUNK_OVERLAP", 50))
     DEFAULT_K: int = int(os.getenv("DEFAULT_K", 5))

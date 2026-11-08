@@ -87,3 +87,4 @@ def ingest_from_source(source_path: str = None):
 if __name__ == "__main__":
     src_arg = sys.argv[1] if len(sys.argv) > 1 else None
     ingest_from_source(src_arg)
+

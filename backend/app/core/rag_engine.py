@@ -10,15 +10,13 @@ from .hybrid_retriever import hybrid_retriever
 
 class RAGEngine:
     def __init__(self):
-        self.default_model = settings.GROQ_MODEL if settings.LLM_PROVIDER == "groq" else settings.DEFAULT_LLM_MODEL
+        self.default_model = settings.GROQ_MODEL
         self.threshold = settings.SIMILARITY_THRESHOLD
         self.groq_client = None
-        self.hf_client = None
-        self._init_llm_clients()
+        self._init_groq_client()
 
-    def _init_llm_clients(self):
-        """Initialize Groq and Hugging Face clients."""
-        # 1. Groq Client
+    def _init_groq_client(self):
+        """Initialize Groq client using server-side environment key only."""
         if settings.GROQ_API_KEY:
             try:
                 from groq import Groq
@@ -27,14 +25,6 @@ class RAGEngine:
             except Exception as e:
                 print(f"Could not load groq SDK ({e}), will use direct REST requests.")
                 self.groq_client = "rest"
-
-        # 2. Hugging Face Client
-        if settings.HF_TOKEN:
-            try:
-                from huggingface_hub import InferenceClient
-                self.hf_client = InferenceClient(api_key=settings.HF_TOKEN)
-            except Exception as e:
-                print(f"Could not initialize HF client: {e}")
 
     def reindex_all(self, chunk_size: int = settings.DEFAULT_CHUNK_SIZE, chunk_overlap: int = settings.DEFAULT_CHUNK_OVERLAP) -> Dict[str, Any]:
         """Ingest all documents in corpus, chunk, embed, and update FAISS index."""
@@ -99,16 +89,22 @@ class RAGEngine:
         )
         return prompt
 
-    def _generate_with_groq(self, prompt: str, model_name: Optional[str] = None, temperature: float = settings.TEMPERATURE) -> str:
-        """Call Groq API using free tier models."""
-        model = model_name or settings.GROQ_MODEL or "llama-3.3-70b-versatile"
-        
+    def generate_llm_response(self, prompt: str, model_name: Optional[str] = None, temperature: float = settings.TEMPERATURE) -> str:
+        """Generate response exclusively using Groq API."""
+        model = model_name or settings.GROQ_MODEL or "qwen/qwen3.8-27b"
+
+        if not settings.GROQ_API_KEY:
+            return (
+                "Groq API Key is not configured on the server.\n\n"
+                "Please configure GROQ_API_KEY in the backend/.env file to enable generation."
+            )
+
         # 1. Via Groq Python SDK
         if self.groq_client and self.groq_client != "rest":
             try:
                 chat_completion = self.groq_client.chat.completions.create(
                     messages=[
-                        {"role": "system", "content": "You are a grounded RAG assistant. Rely strictly on provided context."},
+                        {"role": "system", "content": "You are a grounded assistant. Strictly rely only on provided context."},
                         {"role": "user", "content": prompt}
                     ],
                     model=model,
@@ -119,68 +115,30 @@ class RAGEngine:
             except Exception as e:
                 print(f"Groq SDK call failed: {e}, falling back to REST endpoint...")
 
-        # 2. Via Groq Direct REST API
-        if settings.GROQ_API_KEY:
-            try:
-                url = "https://api.groq.com/openai/v1/chat/completions"
-                headers = {
-                    "Authorization": f"Bearer {settings.GROQ_API_KEY}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": "You are a grounded RAG assistant. Rely strictly on provided context."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "temperature": temperature,
-                    "max_tokens": 800
-                }
-                res = requests.post(url, headers=headers, json=payload, timeout=30)
-                if res.status_code == 200:
-                    data = res.json()
-                    return data["choices"][0]["message"]["content"].strip()
-                else:
-                    return f"[Groq API Error {res.status_code}]: {res.text}"
-            except Exception as e:
-                return f"[Groq Connection Error]: {str(e)}"
-
-        return (
-            "[Groq API Key Required]\n"
-            "Please add your free Groq API key in the backend/.env file (GROQ_API_KEY=gsk_...) or in the Web Settings.\n"
-            "You can get a 100% free API key instantly at: https://console.groq.com/keys"
-        )
-
-    def _generate_with_hf(self, prompt: str, model_name: Optional[str] = None, temperature: float = settings.TEMPERATURE) -> str:
-        """Call Hugging Face Inference API."""
-        model = model_name or settings.DEFAULT_LLM_MODEL
-        if self.hf_client is not None:
-            try:
-                response = self.hf_client.chat.completions.create(
-                    model=model,
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=600,
-                    temperature=temperature
-                )
-                return response.choices[0].message.content.strip()
-            except Exception as e:
-                return f"[HF Generation Error from {model}]: {str(e)}"
-
-        return "[HF_TOKEN not set] Please configure HF_TOKEN or GROQ_API_KEY."
-
-    def generate_llm_response(self, prompt: str, model_name: Optional[str] = None, temperature: float = settings.TEMPERATURE) -> str:
-        """Route generation to Groq (default) or Hugging Face."""
-        if settings.LLM_PROVIDER == "groq" or settings.GROQ_API_KEY:
-            return self._generate_with_groq(prompt, model_name=model_name, temperature=temperature)
-        elif settings.HF_TOKEN:
-            return self._generate_with_hf(prompt, model_name=model_name, temperature=temperature)
-        else:
-            return (
-                "Groq API Key is not set yet.\n\n"
-                "To generate live answers with the free Groq model (`llama-3.3-70b-versatile`), "
-                "paste your API key into `backend/.env` under `GROQ_API_KEY=` or open the Settings modal in the web app.\n\n"
-                "Get your free Groq API key at: https://console.groq.com/keys"
-            )
+        # 2. Via Groq REST API
+        try:
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "You are a grounded assistant. Strictly rely only on provided context."},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": temperature,
+                "max_tokens": 800
+            }
+            res = requests.post(url, headers=headers, json=payload, timeout=30)
+            if res.status_code == 200:
+                data = res.json()
+                return data["choices"][0]["message"]["content"].strip()
+            else:
+                return f"[Groq API Error {res.status_code}]: {res.text}"
+        except Exception as e:
+            return f"[Groq Connection Error]: {str(e)}"
 
     def query(self, question: str, k: int = settings.DEFAULT_K, use_hybrid: bool = False, compare_plain: bool = False, model_name: Optional[str] = None) -> Dict[str, Any]:
         """Execute full RAG pipeline."""
@@ -196,7 +154,7 @@ class RAGEngine:
         if compare_plain:
             answer_without_rag = self.generate_llm_response(question, model_name=model_name)
 
-        active_model = model_name or (settings.GROQ_MODEL if settings.LLM_PROVIDER == "groq" else settings.DEFAULT_LLM_MODEL)
+        active_model = model_name or settings.GROQ_MODEL
 
         return {
             "question": question,
@@ -209,8 +167,7 @@ class RAGEngine:
             "is_low_confidence": is_low_confidence,
             "warning": "Top score is below confidence threshold (0.40). The documents may not contain the answer." if is_low_confidence else None,
             "retrieval_mode": "hybrid" if use_hybrid else "semantic_faiss",
-            "model_used": active_model,
-            "llm_provider": settings.LLM_PROVIDER
+            "model_used": active_model
         }
 
 rag_engine = RAGEngine()

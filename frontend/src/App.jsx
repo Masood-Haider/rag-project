@@ -14,7 +14,7 @@ export default function App() {
   const [isReindexing, setIsReindexing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Default to light theme, persist user preference
+  // Default to clean light mode
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('nexus_theme') || 'light';
   });
@@ -36,7 +36,6 @@ export default function App() {
     k: 5,
     useHybrid: false,
     comparePlain: true,
-    llmProvider: 'groq',
     groqModel: 'qwen/qwen3.8-27b',
     llmModel: 'qwen/qwen3.8-27b',
     threshold: 0.40
@@ -51,8 +50,8 @@ export default function App() {
         if (data.llm_model) {
           setSettingsConfig(prev => ({
             ...prev,
-            llmModel: data.llm_model,
-            llmProvider: data.llm_provider || 'groq'
+            groqModel: data.llm_model,
+            llmModel: data.llm_model
           }));
         }
       }
@@ -102,7 +101,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#fafafa] dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-150">
-      {/* Top Minimalist Navigation Bar */}
+      {/* Top Navigation Bar */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -136,7 +135,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Settings Dialog Modal */}
+      {/* Settings Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}

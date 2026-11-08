@@ -31,6 +31,7 @@ wheels/
 .env.local
 backend/.env
 frontend/.env.local
+backend/data/storage/test_store/
 
 # FAISS and generated index files (optional, but keep default sample or ignore heavy binaries)
 # backend/data/storage/*.index

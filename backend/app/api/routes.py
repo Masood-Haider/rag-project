@@ -14,7 +14,7 @@ from ..schemas.models import (
 )
 from ..core.rag_engine import rag_engine
 from ..core.vector_store import vector_store
-from ..core.document_loader import load_corpus, load_document
+from ..core.document_loader import load_corpus
 
 router = APIRouter()
 
@@ -24,25 +24,22 @@ def health_check():
         "status": "healthy",
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
-        "llm_provider": settings.LLM_PROVIDER
+        "engine": "Groq + FAISS"
     }
 
 @router.get("/stats", response_model=StatsResponse)
 def get_stats():
     docs = load_corpus(settings.CORPUS_DIR)
-    active_model = settings.GROQ_MODEL if settings.LLM_PROVIDER == "groq" else settings.DEFAULT_LLM_MODEL
     return StatsResponse(
         total_documents=len(docs),
         total_chunks=vector_store.total_vectors,
         vector_dimension=settings.EMBEDDING_DIMENSION,
         vector_store_type="FAISS IndexFlatIP (Exact Search)" if vector_store.is_faiss_available else "NumPy FlatIP Store",
         embedding_model=settings.EMBEDDING_MODEL,
-        llm_model=active_model,
-        llm_provider=settings.LLM_PROVIDER,
+        llm_model=settings.GROQ_MODEL,
         similarity_threshold=settings.SIMILARITY_THRESHOLD,
         faiss_available=vector_store.is_faiss_available,
-        groq_configured=bool(settings.GROQ_API_KEY),
-        hf_token_configured=bool(settings.HF_TOKEN)
+        groq_configured=bool(settings.GROQ_API_KEY)
     )
 
 @router.post("/query", response_model=QueryResponse)
@@ -134,27 +131,15 @@ def trigger_reindex(req: ReindexRequest = ReindexRequest()):
 
 @router.post("/settings")
 def update_settings(req: ConfigUpdateRequest):
-    if req.groq_api_key is not None:
-        settings.GROQ_API_KEY = req.groq_api_key.strip()
-        rag_engine._init_llm_clients()
+    """Update runtime hyperparameters. API keys cannot be modified from the client."""
     if req.groq_model is not None:
         settings.GROQ_MODEL = req.groq_model.strip()
-    if req.llm_provider is not None:
-        settings.LLM_PROVIDER = req.llm_provider.strip()
-    if req.hf_token is not None:
-        settings.HF_TOKEN = req.hf_token.strip()
-        rag_engine._init_llm_clients()
-    if req.llm_model is not None:
-        settings.DEFAULT_LLM_MODEL = req.llm_model.strip()
     if req.similarity_threshold is not None:
         settings.SIMILARITY_THRESHOLD = req.similarity_threshold
         rag_engine.threshold = req.similarity_threshold
 
     return {
         "status": "success",
-        "llm_provider": settings.LLM_PROVIDER,
-        "groq_configured": bool(settings.GROQ_API_KEY),
         "groq_model": settings.GROQ_MODEL,
-        "hf_token_set": bool(settings.HF_TOKEN),
         "similarity_threshold": settings.SIMILARITY_THRESHOLD
     }

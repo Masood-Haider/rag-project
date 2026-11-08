@@ -14,7 +14,7 @@ class QueryRequest(BaseModel):
     k: int = Field(5, ge=1, le=20, description="Top-k chunks to retrieve")
     use_hybrid: bool = Field(False, description="Combine semantic search with TF-IDF keyword search")
     compare_plain: bool = Field(True, description="Also generate answer without RAG context for side-by-side comparison")
-    model_name: Optional[str] = Field(None, description="Groq or Hugging Face LLM model identifier")
+    model_name: Optional[str] = Field(None, description="Groq model identifier")
 
 class QueryResponse(BaseModel):
     question: str
@@ -28,7 +28,6 @@ class QueryResponse(BaseModel):
     warning: Optional[str] = None
     retrieval_mode: str
     model_used: str
-    llm_provider: str
 
 class ReindexRequest(BaseModel):
     chunk_size: Optional[int] = 300
@@ -59,16 +58,11 @@ class StatsResponse(BaseModel):
     vector_store_type: str
     embedding_model: str
     llm_model: str
-    llm_provider: str
     similarity_threshold: float
     faiss_available: bool
     groq_configured: bool
-    hf_token_configured: bool
 
 class ConfigUpdateRequest(BaseModel):
-    groq_api_key: Optional[str] = None
+    # Only hyperparameters can be updated by clients - API keys are strictly server-side
     groq_model: Optional[str] = None
-    hf_token: Optional[str] = None
-    llm_model: Optional[str] = None
-    llm_provider: Optional[str] = None
     similarity_threshold: Optional[float] = None
