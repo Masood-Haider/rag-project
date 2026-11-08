@@ -176,7 +176,7 @@ export default function App() {
         onToggleTheme={toggleTheme}
       />
 
-      <main className="flex-1">
+      <main className="flex-1 overflow-y-auto">
         {activeTab === 'chat' && (
           <ChatView
             apiUrl={API_BASE}

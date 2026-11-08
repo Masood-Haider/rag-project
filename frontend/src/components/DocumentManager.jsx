@@ -303,7 +303,7 @@ export default function DocumentManager({
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+    <div className="max-w-4xl mx-auto px-4 py-6 space-y-6 pb-24">
       
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-200 dark:border-zinc-800">
@@ -490,8 +490,8 @@ export default function DocumentManager({
       )}
 
       {/* Documents List */}
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-xs">
-        <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs font-medium text-zinc-500">
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-xs flex flex-col">
+        <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs font-medium text-zinc-500 bg-zinc-50/70 dark:bg-zinc-900/70 backdrop-blur-xs sticky top-0 z-10">
           <span>Available Documents ({documents.length})</span>
           {!isAdmin && documents.some(d => !d.is_permanent) && (
             <button
@@ -508,7 +508,7 @@ export default function DocumentManager({
             No documents in corpus. Upload files above to index knowledge.
           </div>
         ) : (
-          <div className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+          <div className="divide-y divide-zinc-100 dark:divide-zinc-800/80 max-h-[460px] overflow-y-auto overscroll-contain">
             {documents.map((doc) => (
               <div
                 key={doc.filename}
