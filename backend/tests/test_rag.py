@@ -66,6 +66,10 @@ def test_document_loader():
         import shutil
         shutil.rmtree(test_dir, ignore_errors=True)
 
+def test_docx_extractor():
+    from app.core.document_loader import extract_text_from_docx
+    assert extract_text_from_docx(Path("missing_file.docx")) == ""
+
 def test_fastapi_health_endpoint():
     from fastapi.testclient import TestClient
     from app.main import app

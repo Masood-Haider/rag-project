@@ -31,6 +31,32 @@ def extract_text_from_pdf(pdf_path: pathlib.Path) -> str:
         print(f"Error reading PDF {pdf_path}: {e}")
         return ""
 
+def extract_text_from_docx(docx_path: pathlib.Path) -> str:
+    """Extract text from Word .docx file using standard library zipfile + XML parser."""
+    import zipfile
+    import xml.etree.ElementTree as ET
+
+    try:
+        with zipfile.ZipFile(docx_path) as z:
+            if "word/document.xml" not in z.namelist():
+                return ""
+            xml_content = z.read("word/document.xml")
+            tree = ET.fromstring(xml_content)
+            paragraphs = []
+            for p_elem in tree.iter():
+                if p_elem.tag.endswith("}p") or p_elem.tag == "p":
+                    p_text = "".join(
+                        t_elem.text
+                        for t_elem in p_elem.iter()
+                        if (t_elem.tag.endswith("}t") or t_elem.tag == "t") and t_elem.text
+                    )
+                    if p_text.strip():
+                        paragraphs.append(p_text.strip())
+            return "\n\n".join(paragraphs).strip()
+    except Exception as e:
+        print(f"Error reading docx {docx_path}: {e}")
+        return ""
+
 def load_document(file_path: pathlib.Path) -> Optional[LoadedDocument]:
     """Read a single document and return its text."""
     if not file_path.is_file():
@@ -47,6 +73,8 @@ def load_document(file_path: pathlib.Path) -> Optional[LoadedDocument]:
                 text = file_path.read_text(encoding="latin-1", errors="replace")
         elif ext == ".pdf":
             text = extract_text_from_pdf(file_path)
+        elif ext in [".docx", ".doc"]:
+            text = extract_text_from_docx(file_path)
         else:
             # Try reading as text
             try:
