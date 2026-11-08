@@ -47,9 +47,24 @@ def test_vector_store_in_memory():
     assert "Precision" in hits[0]["chunk"]
 
 def test_document_loader():
-    docs = load_corpus(settings.CORPUS_DIR)
-    assert len(docs) >= 1
-    assert any("sample_course_notes.txt" in d.filename for d in docs)
+    from app.core.document_loader import load_document
+    test_dir = settings.BACKEND_DIR / "data" / "test_corpus"
+    test_dir.mkdir(parents=True, exist_ok=True)
+    test_file = test_dir / "test_doc.txt"
+    test_file.write_text("Machine learning evaluation metrics include precision, recall, and F1 score.", encoding="utf-8")
+    try:
+        doc = load_document(test_file)
+        assert doc is not None
+        assert doc.filename == "test_doc.txt"
+        assert "precision" in doc.text
+        assert doc.char_count > 0
+
+        docs = load_corpus(test_dir)
+        assert len(docs) >= 1
+        assert any(d.filename == "test_doc.txt" for d in docs)
+    finally:
+        import shutil
+        shutil.rmtree(test_dir, ignore_errors=True)
 
 def test_fastapi_health_endpoint():
     from fastapi.testclient import TestClient
