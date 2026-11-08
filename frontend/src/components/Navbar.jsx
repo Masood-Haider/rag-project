@@ -22,10 +22,10 @@ export default function Navbar({
           </div>
           <div className="flex items-baseline gap-2">
             <span className="font-semibold text-sm tracking-tight text-zinc-900 dark:text-zinc-100">
-              Nexus
+              RAG
             </span>
             <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400">
-              RAG Engine
+              ENGINE
             </span>
           </div>
         </div>

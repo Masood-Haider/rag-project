@@ -13,7 +13,7 @@ if backend_env.exists():
     load_dotenv(dotenv_path=backend_env)
 
 class Settings:
-    PROJECT_NAME: str = "Nexus RAG System"
+    PROJECT_NAME: str = "RAG"
     VERSION: str = "1.0.0"
     API_PREFIX: str = "/api"
 
