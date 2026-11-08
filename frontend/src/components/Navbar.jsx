@@ -10,7 +10,7 @@ export default function Navbar({
   onToggleTheme
 }) {
   return (
-    <header className="border-b border-zinc-200 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-950/80 backdrop-blur sticky top-0 z-40 transition-colors">
+    <header className="border-b border-zinc-200 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-950/80 backdrop-blur sticky top-0 left-0 right-0 w-full z-40 transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
         
         {/* Professional Minimalist Logo */}

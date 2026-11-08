@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Sliders, CheckCircle2, ShieldCheck } from 'lucide-react';
 
 export default function SettingsModal({
@@ -9,6 +10,16 @@ export default function SettingsModal({
   apiUrl
 }) {
   if (!isOpen) return null;
+
+  // Lock body scroll while modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = '';
+      };
+    }
+  }, [isOpen]);
 
   const [groqModel, setGroqModel] = useState(settingsConfig.groqModel || 'qwen/qwen3.8-27b');
   const [k, setK] = useState(settingsConfig.k || 5);
@@ -58,8 +69,8 @@ export default function SettingsModal({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 w-full max-w-md rounded-xl p-5 shadow-xl relative space-y-4 max-h-[90vh] overflow-y-auto">
         
         {/* Header */}
@@ -183,6 +194,7 @@ export default function SettingsModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

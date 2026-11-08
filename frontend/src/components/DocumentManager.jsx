@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, FileText, Trash2, RefreshCw, Folder, CheckCircle, AlertCircle, HardDrive, Lock, Unlock, ShieldAlert } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { UploadCloud, FileText, Trash2, RefreshCw, CheckCircle, AlertCircle, HardDrive, Lock, Unlock, X } from 'lucide-react';
 
 export default function DocumentManager({
   documents,
@@ -20,11 +21,49 @@ export default function DocumentManager({
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [inputPassword, setInputPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  
   const fileInputRef = useRef(null);
+  const modalInputRef = useRef(null);
+
+  // Prevent scroll & white-space jump when popup opens
+  useEffect(() => {
+    if (showPasswordDialog) {
+      document.body.style.overflow = 'hidden';
+      const timer = setTimeout(() => {
+        modalInputRef.current?.focus({ preventScroll: true });
+      }, 50);
+      return () => {
+        clearTimeout(timer);
+        document.body.style.overflow = '';
+      };
+    } else {
+      document.body.style.overflow = '';
+    }
+  }, [showPasswordDialog]);
+
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && showPasswordDialog) {
+        setShowPasswordDialog(false);
+        setPasswordError('');
+        setInputPassword('');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showPasswordDialog]);
 
   const handleVerifyPassword = async (e) => {
     e.preventDefault();
+    if (!inputPassword.trim()) {
+      setPasswordError('Please enter a password.');
+      return;
+    }
+
     setPasswordError('');
+    setIsVerifying(true);
 
     try {
       const res = await fetch(`${apiUrl}/admin/verify`, {
@@ -32,7 +71,33 @@ export default function DocumentManager({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: inputPassword })
       });
-      const data = await res.json();
+
+      // Handle non-OK status or connection failures safely without crashing on res.json()
+      if (!res.ok) {
+        if (res.status === 502 || res.status === 504 || res.status === 500) {
+          throw new Error('Backend server is unreachable. Please ensure "python run.py" is running in the backend folder.');
+        }
+        let errMsg = 'Verification failed.';
+        try {
+          const errData = await res.json();
+          errMsg = errData.detail || errData.message || errMsg;
+        } catch (_) {}
+        setPasswordError(errMsg);
+        return;
+      }
+
+      const text = await res.text();
+      if (!text) {
+        throw new Error('Server returned an empty response. Verify the FastAPI backend is running.');
+      }
+
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error('Invalid response from server. Check backend terminal for errors.');
+      }
+
       if (data.success) {
         setIsAdmin(true);
         setAdminPassword(inputPassword);
@@ -43,7 +108,14 @@ export default function DocumentManager({
         setPasswordError('Incorrect admin password.');
       }
     } catch (err) {
-      setPasswordError(`Verification failed: ${err.message}`);
+      const isNetworkErr = err.message.includes('fetch') || err.message.includes('Failed to execute') || err.message.includes('unreachable');
+      setPasswordError(
+        isNetworkErr
+          ? 'Backend offline: Please start the FastAPI backend (run "python run.py" in backend folder).'
+          : err.message
+      );
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -73,23 +145,27 @@ export default function DocumentManager({
         method: 'POST',
         body: formData,
       });
-      const data = await res.json();
-      if (res.ok) {
-        setUploadMessage({
-          type: 'success',
-          text: data.message || `Uploaded ${data.uploaded_files.length} document(s).`
-        });
-        onRefreshDocs();
-      } else {
-        setUploadMessage({
-          type: 'error',
-          text: data.detail || 'Upload failed.'
-        });
+
+      if (!res.ok) {
+        let errDetail = 'Upload failed.';
+        try {
+          const errData = await res.json();
+          errDetail = errData.detail || errDetail;
+        } catch (_) {}
+        setUploadMessage({ type: 'error', text: errDetail });
+        return;
       }
+
+      const data = await res.json();
+      setUploadMessage({
+        type: 'success',
+        text: data.message || `Uploaded ${data.uploaded_files.length} document(s).`
+      });
+      onRefreshDocs();
     } catch (err) {
       setUploadMessage({
         type: 'error',
-        text: `Network error: ${err.message}`
+        text: `Network error: ${err.message}. Check if backend is running.`
       });
     } finally {
       setIsUploading(false);
@@ -208,10 +284,27 @@ export default function DocumentManager({
         </div>
       </div>
 
-      {/* Admin Unlock Modal Dialog */}
-      {showPasswordDialog && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 w-full max-w-sm shadow-xl space-y-3">
+      {/* Admin Unlock Modal Dialog - Portaled directly to document.body to prevent any layout shift or top white space */}
+      {showPasswordDialog && createPortal(
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowPasswordDialog(false);
+              setPasswordError('');
+              setInputPassword('');
+            }
+          }}
+        >
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 w-full max-w-sm shadow-xl space-y-3 relative">
+            <button
+              type="button"
+              onClick={() => setShowPasswordDialog(false)}
+              className="absolute right-3.5 top-3.5 p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-md transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
               <Lock className="w-4 h-4" />
               Unlock Permanent Admin Storage
@@ -219,36 +312,41 @@ export default function DocumentManager({
             <p className="text-xs text-zinc-500">
               Enter your admin password from <code className="font-mono">backend/.env</code> to permanently add or remove database files.
             </p>
-            <form onSubmit={handleVerifyPassword} className="space-y-3">
+
+            <form onSubmit={handleVerifyPassword} className="space-y-3 pt-1">
               <input
+                ref={modalInputRef}
                 type="password"
                 value={inputPassword}
                 onChange={(e) => setInputPassword(e.target.value)}
                 placeholder="Admin password"
-                autoFocus
+                disabled={isVerifying}
                 className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-400"
               />
               {passwordError && (
-                <p className="text-[11px] text-rose-600 dark:text-rose-400">{passwordError}</p>
+                <p className="text-[11px] text-rose-600 dark:text-rose-400 leading-tight">{passwordError}</p>
               )}
               <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setShowPasswordDialog(false)}
+                  disabled={isVerifying}
                   className="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-3.5 py-1.5 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-medium"
+                  disabled={isVerifying || !inputPassword.trim()}
+                  className="px-3.5 py-1.5 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-medium disabled:opacity-50 transition"
                 >
-                  Unlock
+                  {isVerifying ? 'Verifying...' : 'Unlock'}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Drag & Drop Upload Zone */}
