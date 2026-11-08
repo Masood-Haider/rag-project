@@ -174,16 +174,14 @@ Set the following environment variable in your backend hosting:
 
 ---
 
-## ⚙️ Configuration & Hyperparameters
+## ⚙️ Environment Variables (Only 2 Required!)
 
-| Variable | Default | Description |
-|---|---|---|
-| `HF_TOKEN` | `""` | Hugging Face token for DeepSeek and API embeddings |
-| `LLM_MODEL` | `deepseek-ai/DeepSeek-V3-0324` | Model used for grounded generation |
-| `DEFAULT_CHUNK_SIZE` | `300` | Target character size per chunk |
-| `DEFAULT_CHUNK_OVERLAP`| `50` | Overlap between adjacent chunks |
-| `DEFAULT_K` | `5` | Top-k chunks retrieved per query |
-| `SIMILARITY_THRESHOLD` | `0.40` | Notebook honest test out-of-domain threshold |
+| Variable | Description |
+|---|---|
+| `GROQ_API_KEY` | Your free Groq API key from [https://console.groq.com/keys](https://console.groq.com/keys) |
+| `ADMIN_PASSWORD` | Password to unlock permanent knowledge base file uploads |
+
+All other hyperparameters (`GROQ_MODEL`, `DEFAULT_CHUNK_SIZE`, `DEFAULT_K`, etc.) have built-in defaults and can be tuned dynamically via the UI Settings modal!
 
 ---
 

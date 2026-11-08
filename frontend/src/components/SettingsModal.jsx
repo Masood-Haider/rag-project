@@ -22,6 +22,8 @@ export default function SettingsModal({
   }, [isOpen]);
 
   const [groqModel, setGroqModel] = useState(settingsConfig.groqModel || 'qwen/qwen3.8-27b');
+  const [chunkSize, setChunkSize] = useState(settingsConfig.chunkSize || 300);
+  const [chunkOverlap, setChunkOverlap] = useState(settingsConfig.chunkOverlap || 50);
   const [k, setK] = useState(settingsConfig.k || 5);
   const [useHybrid, setUseHybrid] = useState(settingsConfig.useHybrid || false);
   const [comparePlain, setComparePlain] = useState(settingsConfig.comparePlain !== false);
@@ -43,13 +45,18 @@ export default function SettingsModal({
       useHybrid,
       comparePlain,
       llmModel: groqModel,
-      threshold
+      threshold,
+      chunkSize,
+      chunkOverlap
     });
 
     try {
       const payload = {
         groq_model: groqModel,
-        similarity_threshold: threshold
+        similarity_threshold: threshold,
+        chunk_size: chunkSize,
+        chunk_overlap: chunkOverlap,
+        k
       };
 
       await fetch(`${apiUrl}/settings`, {
@@ -107,6 +114,43 @@ export default function SettingsModal({
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Chunk Size & Overlap */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs">
+              <span className="font-medium text-zinc-700 dark:text-zinc-300">Chunk Size</span>
+              <span className="font-mono text-zinc-900 dark:text-zinc-100 font-semibold">{chunkSize} chars</span>
+            </div>
+            <input
+              type="range"
+              min="100"
+              max="1000"
+              step="50"
+              value={chunkSize}
+              onChange={(e) => setChunkSize(parseInt(e.target.value))}
+              className="w-full accent-zinc-900 dark:accent-zinc-100"
+            />
+            <p className="text-[10px] text-zinc-500">Target chunk size.</p>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs">
+              <span className="font-medium text-zinc-700 dark:text-zinc-300">Overlap</span>
+              <span className="font-mono text-zinc-900 dark:text-zinc-100 font-semibold">{chunkOverlap} chars</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="200"
+              step="10"
+              value={chunkOverlap}
+              onChange={(e) => setChunkOverlap(parseInt(e.target.value))}
+              className="w-full accent-zinc-900 dark:accent-zinc-100"
+            />
+            <p className="text-[10px] text-zinc-500">Adjacent overlap chars.</p>
+          </div>
         </div>
 
         {/* Top-K Slider */}

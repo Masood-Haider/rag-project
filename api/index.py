@@ -15,3 +15,4 @@ from app.main import app
 
 # Export app for Vercel Python runtime
 handler = app
+

@@ -65,7 +65,9 @@ export default function App() {
     comparePlain: true,
     groqModel: 'qwen/qwen3.8-27b',
     llmModel: 'qwen/qwen3.8-27b',
-    threshold: 0.40
+    threshold: 0.40,
+    chunkSize: 300,
+    chunkOverlap: 50
   });
 
   const fetchStats = async () => {
@@ -74,13 +76,15 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setStats(data);
-        if (data.llm_model) {
-          setSettingsConfig(prev => ({
-            ...prev,
-            groqModel: data.llm_model,
-            llmModel: data.llm_model
-          }));
-        }
+        setSettingsConfig(prev => ({
+          ...prev,
+          groqModel: data.llm_model || prev.groqModel,
+          llmModel: data.llm_model || prev.llmModel,
+          threshold: data.similarity_threshold ?? prev.threshold,
+          chunkSize: data.chunk_size ?? prev.chunkSize,
+          chunkOverlap: data.chunk_overlap ?? prev.chunkOverlap,
+          k: data.default_k ?? prev.k
+        }));
       }
     } catch (e) {
       console.warn("Backend not reached yet:", e);
@@ -121,7 +125,10 @@ export default function App() {
       const res = await fetch(`${API_BASE}/reindex`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ chunk_size: 300, chunk_overlap: 50 })
+        body: JSON.stringify({
+          chunk_size: settingsConfig.chunkSize || 300,
+          chunk_overlap: settingsConfig.chunkOverlap || 50
+        })
       });
       if (res.ok) {
         await fetchStats();

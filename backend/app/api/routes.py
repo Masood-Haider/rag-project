@@ -53,6 +53,9 @@ def get_stats():
         embedding_model=settings.EMBEDDING_MODEL,
         llm_model=settings.GROQ_MODEL,
         similarity_threshold=settings.SIMILARITY_THRESHOLD,
+        chunk_size=settings.DEFAULT_CHUNK_SIZE,
+        chunk_overlap=settings.DEFAULT_CHUNK_OVERLAP,
+        default_k=settings.DEFAULT_K,
         faiss_available=vector_store.is_faiss_available,
         groq_configured=bool(settings.GROQ_API_KEY)
     )
@@ -233,9 +236,18 @@ def update_settings(req: ConfigUpdateRequest):
     if req.similarity_threshold is not None:
         settings.SIMILARITY_THRESHOLD = req.similarity_threshold
         rag_engine.threshold = req.similarity_threshold
+    if req.chunk_size is not None:
+        settings.DEFAULT_CHUNK_SIZE = req.chunk_size
+    if req.chunk_overlap is not None:
+        settings.DEFAULT_CHUNK_OVERLAP = req.chunk_overlap
+    if req.k is not None:
+        settings.DEFAULT_K = req.k
 
     return {
         "status": "success",
         "groq_model": settings.GROQ_MODEL,
-        "similarity_threshold": settings.SIMILARITY_THRESHOLD
+        "similarity_threshold": settings.SIMILARITY_THRESHOLD,
+        "chunk_size": settings.DEFAULT_CHUNK_SIZE,
+        "chunk_overlap": settings.DEFAULT_CHUNK_OVERLAP,
+        "default_k": settings.DEFAULT_K
     }

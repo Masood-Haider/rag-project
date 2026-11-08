@@ -62,12 +62,18 @@ class StatsResponse(BaseModel):
     embedding_model: str
     llm_model: str
     similarity_threshold: float
+    chunk_size: int = 300
+    chunk_overlap: int = 50
+    default_k: int = 5
     faiss_available: bool
     groq_configured: bool
 
 class ConfigUpdateRequest(BaseModel):
     groq_model: Optional[str] = None
     similarity_threshold: Optional[float] = None
+    chunk_size: Optional[int] = None
+    chunk_overlap: Optional[int] = None
+    k: Optional[int] = None
 
 class AdminVerifyRequest(BaseModel):
     password: str
