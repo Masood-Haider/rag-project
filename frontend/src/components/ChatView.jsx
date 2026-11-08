@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ArrowUp, FileText, AlertCircle, Copy, Check, ChevronDown, ChevronUp, Sparkles, Terminal, Download, Trash2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { ArrowUp, FileText, AlertCircle, Copy, Check, ChevronDown, ChevronUp, Terminal, Download, Trash2 } from 'lucide-react';
 import ChunkInspector from './ChunkInspector';
 
 // Lightweight, clean Markdown & Code renderer without heavy dependencies
@@ -89,6 +89,26 @@ export default function ChatView({ apiUrl, settingsConfig, sessionId }) {
   const [copiedIdx, setCopiedIdx] = useState(null);
   const [expandedChunksIdx, setExpandedChunksIdx] = useState(null);
 
+  const lastUserMsgRef = useRef(null);
+  const chatContainerRef = useRef(null);
+  const messagesEndRef = useRef(null);
+
+  // Auto-scroll so user query and assistant answer start are prominently in view
+  useEffect(() => {
+    if (loading && lastUserMsgRef.current) {
+      lastUserMsgRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [loading]);
+
+  useEffect(() => {
+    if (!loading && messages.length > 1 && lastUserMsgRef.current) {
+      const timer = setTimeout(() => {
+        lastUserMsgRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, messages.length]);
+
   const quickQuestions = [
     "Summarize the main topics in the uploaded documents",
     "What are the key technical concepts and definitions?",
@@ -112,7 +132,7 @@ export default function ChatView({ apiUrl, settingsConfig, sessionId }) {
           question: queryText,
           k: settingsConfig.k,
           use_hybrid: settingsConfig.useHybrid,
-          compare_plain: settingsConfig.comparePlain,
+          compare_plain: false,
           model_name: settingsConfig.llmModel,
           session_id: sessionId
         })
@@ -128,7 +148,7 @@ export default function ChatView({ apiUrl, settingsConfig, sessionId }) {
             result: data
           }
         ]);
-        setExpandedChunksIdx(messages.length + 1);
+        // Note: retrieved chunks remain collapsed / hidden by default as requested
       } else {
         setMessages(prev => [
           ...prev,
@@ -219,131 +239,123 @@ export default function ChatView({ apiUrl, settingsConfig, sessionId }) {
       </div>
 
       {/* Messages Stream */}
-      <div className="flex-1 overflow-y-auto space-y-5 pr-1 mb-3">
-        {messages.map((msg, idx) => (
-          <div
-            key={idx}
-            className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
-          >
-            {/* Sender Label */}
-            <div className="flex items-center gap-1.5 mb-1 px-1 text-[11px] font-mono text-zinc-600 dark:text-zinc-400">
-              {msg.role === 'user' ? (
-                <span>You</span>
-              ) : (
-                <span className="flex items-center gap-1">
-                  <Terminal className="w-3 h-3 text-zinc-500" />
-                  <span>Assistant</span>
-                  {msg.result?.model_used && (
-                    <span className="text-[10px] text-zinc-500">
-                      • {msg.result.model_used}
-                    </span>
-                  )}
-                </span>
-              )}
-            </div>
-
-            {/* Bubble Card */}
+      <div ref={chatContainerRef} className="flex-1 overflow-y-auto space-y-5 pr-1 mb-3 scroll-smooth">
+        {messages.map((msg, idx) => {
+          const isLatestUser = msg.role === 'user' && idx === messages.map(m => m.role).lastIndexOf('user');
+          return (
             <div
-              className={`max-w-2xl text-[13.5px] leading-relaxed transition-all ${
-                msg.role === 'user'
-                  ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 px-4 py-2.5 rounded-2xl shadow-sm'
-                  : 'bg-white dark:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200 p-4 rounded-xl shadow-xs w-full'
-              }`}
+              key={idx}
+              ref={isLatestUser ? lastUserMsgRef : null}
+              className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} scroll-mt-4`}
             >
-              {/* Out-of-Domain Honest Test Alert */}
-              {msg.result?.is_low_confidence && (
-                <div className="mb-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 text-xs flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <span className="font-semibold">Honest Test Alert:</span> Top similarity score ({msg.result.top_score}) is below the {msg.result.threshold} threshold. The context may not contain the answer.
-                  </div>
-                </div>
-              )}
-
-              {/* Message Content with Markdown parsing */}
-              <div className="text-[13.5px]">
+              {/* Sender Label */}
+              <div className="flex items-center gap-1.5 mb-1 px-1 text-[11px] font-mono text-zinc-600 dark:text-zinc-400">
                 {msg.role === 'user' ? (
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
+                  <span>You</span>
                 ) : (
-                  <FormattedMessage text={msg.content} />
+                  <span className="flex items-center gap-1">
+                    <Terminal className="w-3 h-3 text-zinc-500" />
+                    <span>Assistant</span>
+                    {msg.result?.model_used && (
+                      <span className="text-[10px] text-zinc-500">
+                        • {msg.result.model_used}
+                      </span>
+                    )}
+                  </span>
                 )}
               </div>
 
-              {/* Grounded Sources */}
-              {msg.result?.sources?.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-wrap items-center gap-1.5 text-xs">
-                  <span className="text-zinc-600 dark:text-zinc-400 font-medium text-[11px]">Sources:</span>
-                  {msg.result.sources.map((src, i) => (
-                    <span
-                      key={i}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-[11px] font-mono border border-zinc-200/60 dark:border-zinc-700/60"
-                    >
-                      <FileText className="w-3 h-3 text-zinc-400" />
-                      {src}
-                    </span>
-                  ))}
-                </div>
-              )}
+              {/* Bubble Card */}
+              <div
+                className={`max-w-2xl text-[13.5px] leading-relaxed transition-all ${
+                  msg.role === 'user'
+                    ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 px-4 py-2.5 rounded-2xl shadow-sm'
+                    : 'bg-white dark:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200 p-4 rounded-xl shadow-xs w-full'
+                }`}
+              >
+                {/* Out-of-Domain Honest Test Alert */}
+                {msg.result?.is_low_confidence && (
+                  <div className="mb-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <span className="font-semibold">Honest Test Alert:</span> Top similarity score ({msg.result.top_score}) is below the {msg.result.threshold} threshold. The context may not contain the answer.
+                    </div>
+                  </div>
+                )}
 
-              {/* Copy Action */}
-              {msg.role === 'assistant' && !msg.error && (
-                <div className="mt-2 flex justify-end">
+                {/* Message Content with Markdown parsing */}
+                <div className="text-[13.5px]">
+                  {msg.role === 'user' ? (
+                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                  ) : (
+                    <FormattedMessage text={msg.content} />
+                  )}
+                </div>
+
+                {/* Grounded Sources */}
+                {msg.result?.sources?.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-wrap items-center gap-1.5 text-xs">
+                    <span className="text-zinc-600 dark:text-zinc-400 font-medium text-[11px]">Sources:</span>
+                    {msg.result.sources.map((src, i) => (
+                      <span
+                        key={i}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-[11px] font-mono border border-zinc-200/60 dark:border-zinc-700/60"
+                      >
+                        <FileText className="w-3 h-3 text-zinc-400" />
+                        {src}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Copy Action */}
+                {msg.role === 'assistant' && !msg.error && (
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      onClick={() => copyText(msg.content, idx)}
+                      className="text-[11px] text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 flex items-center gap-1 transition"
+                    >
+                      {copiedIdx === idx ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedIdx === idx ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Retrieved Chunks Toggle (Hidden by default, expandable on click) */}
+              {msg.result?.retrieved_chunks && msg.result.retrieved_chunks.length > 0 && (
+                <div className="mt-2 w-full max-w-2xl">
                   <button
-                    onClick={() => copyText(msg.content, idx)}
-                    className="text-[11px] text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 flex items-center gap-1 transition"
+                    onClick={() => setExpandedChunksIdx(expandedChunksIdx === idx ? null : idx)}
+                    className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 transition"
                   >
-                    {copiedIdx === idx ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedIdx === idx ? 'Copied' : 'Copy'}</span>
+                    <span>{expandedChunksIdx === idx ? 'Hide retrieved chunks' : `View ${msg.result.retrieved_chunks.length} retrieved chunks`}</span>
+                    {expandedChunksIdx === idx ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                   </button>
+
+                  {expandedChunksIdx === idx && (
+                    <div className="mt-2">
+                      <ChunkInspector
+                        chunks={msg.result.retrieved_chunks}
+                        topScore={msg.result.top_score}
+                        threshold={msg.result.threshold}
+                        retrievalMode={msg.result.retrieval_mode}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-
-            {/* Plain LLM Comparison (Without RAG) */}
-            {msg.result?.answer_without_rag && (
-              <div className="mt-2 w-full max-w-2xl p-3 rounded-lg bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800 text-xs">
-                <div className="flex items-center gap-1 text-[11px] font-mono text-zinc-600 dark:text-zinc-400 mb-1">
-                  <Sparkles className="w-3 h-3 text-zinc-500" />
-                  <span>Without Retrieval (Plain Generation)</span>
-                </div>
-                <p className="text-zinc-600 dark:text-zinc-400 italic">
-                  "{msg.result.answer_without_rag}"
-                </p>
-              </div>
-            )}
-
-            {/* Retrieved Chunks Toggle */}
-            {msg.result?.retrieved_chunks && (
-              <div className="mt-2 w-full max-w-2xl">
-                <button
-                  onClick={() => setExpandedChunksIdx(expandedChunksIdx === idx ? null : idx)}
-                  className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 transition"
-                >
-                  <span>{expandedChunksIdx === idx ? 'Hide retrieved chunks' : `Inspect ${msg.result.retrieved_chunks.length} retrieved chunks`}</span>
-                  {expandedChunksIdx === idx ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                </button>
-
-                {expandedChunksIdx === idx && (
-                  <div className="mt-2">
-                    <ChunkInspector
-                      chunks={msg.result.retrieved_chunks}
-                      topScore={msg.result.top_score}
-                      threshold={msg.result.threshold}
-                      retrievalMode={msg.result.retrieval_mode}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
 
         {loading && (
           <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400 p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg">
             <span className="w-2 h-2 rounded-full bg-zinc-600 dark:bg-zinc-400 animate-pulse"></span>
-            <span>Querying FAISS vector index & generating grounded response...</span>
+            <span>Querying vector index & generating grounded response...</span>
           </div>
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Suggested Queries */}

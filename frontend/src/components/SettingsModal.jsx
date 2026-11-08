@@ -26,7 +26,6 @@ export default function SettingsModal({
   const [chunkOverlap, setChunkOverlap] = useState(settingsConfig.chunkOverlap || 50);
   const [k, setK] = useState(settingsConfig.k || 5);
   const [useHybrid, setUseHybrid] = useState(settingsConfig.useHybrid || false);
-  const [comparePlain, setComparePlain] = useState(settingsConfig.comparePlain !== false);
   const [threshold, setThreshold] = useState(settingsConfig.threshold || 0.40);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -43,7 +42,7 @@ export default function SettingsModal({
       groqModel,
       k,
       useHybrid,
-      comparePlain,
+      comparePlain: false,
       llmModel: groqModel,
       threshold,
       chunkSize,
@@ -189,7 +188,7 @@ export default function SettingsModal({
         </div>
 
         {/* Toggles */}
-        <div className="pt-2 space-y-2.5 border-t border-zinc-100 dark:border-zinc-800 text-xs">
+        <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 text-xs">
           <label className="flex items-center justify-between cursor-pointer">
             <div>
               <span className="font-medium text-zinc-800 dark:text-zinc-200">Hybrid Search</span>
@@ -199,19 +198,6 @@ export default function SettingsModal({
               type="checkbox"
               checked={useHybrid}
               onChange={(e) => setUseHybrid(e.target.checked)}
-              className="w-4 h-4 accent-zinc-900 dark:accent-zinc-100 rounded"
-            />
-          </label>
-
-          <label className="flex items-center justify-between cursor-pointer">
-            <div>
-              <span className="font-medium text-zinc-800 dark:text-zinc-200">Side-by-side Plain Comparison</span>
-              <p className="text-[10px] text-zinc-500">Generates answers both WITH retrieval and WITHOUT retrieval</p>
-            </div>
-            <input
-              type="checkbox"
-              checked={comparePlain}
-              onChange={(e) => setComparePlain(e.target.checked)}
               className="w-4 h-4 accent-zinc-900 dark:accent-zinc-100 rounded"
             />
           </label>

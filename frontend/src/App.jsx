@@ -79,7 +79,7 @@ export default function App() {
   const [settingsConfig, setSettingsConfig] = useState({
     k: 5,
     useHybrid: false,
-    comparePlain: true,
+    comparePlain: false,
     groqModel: 'qwen/qwen3.8-27b',
     llmModel: 'qwen/qwen3.8-27b',
     threshold: 0.40,
