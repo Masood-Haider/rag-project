@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Sliders, CheckCircle2, ShieldCheck, RefreshCw, GitBranch, Key } from 'lucide-react';
+import { X, Sliders, CheckCircle2, ShieldCheck, RefreshCw } from 'lucide-react';
 
 export default function SettingsModal({
   isOpen,
@@ -32,7 +32,6 @@ export default function SettingsModal({
   const [k, setK] = useState(settingsConfig.k || 5);
   const [useHybrid, setUseHybrid] = useState(settingsConfig.useHybrid || false);
   const [threshold, setThreshold] = useState(settingsConfig.threshold || 0.40);
-  const [githubToken, setGithubToken] = useState('');
   const [isApplying, setIsApplying] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -58,10 +57,6 @@ export default function SettingsModal({
         k,
         session_id: sessionId || null
       };
-
-      if (isAdmin && githubToken.trim()) {
-        payload.github_token = githubToken.trim();
-      }
 
       const headers = { 'Content-Type': 'application/json' };
       if (isAdmin && adminPassword) {
@@ -232,48 +227,6 @@ export default function SettingsModal({
           />
           <p className="text-[10px] text-zinc-500">Retrieval scores below this threshold trigger an out-of-domain alert.</p>
         </div>
-
-        {/* GitHub Repository Sync (Admin Only) */}
-        {isAdmin && (
-          <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
-                <GitBranch className="w-3.5 h-3.5 text-zinc-500" />
-                GitHub Corpus Sync
-              </span>
-              {stats?.github_sync_configured ? (
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                  Connected
-                </span>
-              ) : (
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
-                  Not Configured
-                </span>
-              )}
-            </div>
-
-            <div className="text-[11px] text-zinc-500">
-              Target Repo: <code className="font-mono text-zinc-700 dark:text-zinc-300">{stats?.github_repo || 'Masood-Haider/rag-project'}</code> (branch: <code className="font-mono">main</code>)
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[11px] text-zinc-600 dark:text-zinc-400 flex items-center gap-1">
-                <Key className="w-3 h-3" />
-                Personal Access Token (PAT)
-              </label>
-              <input
-                type="password"
-                value={githubToken}
-                onChange={(e) => setGithubToken(e.target.value)}
-                placeholder={stats?.github_sync_configured ? "Token is active (enter new token to update)" : "ghp_... (Needs Contents: Read & Write)"}
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md px-2.5 py-1.5 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-400 font-mono"
-              />
-              <p className="text-[10px] text-zinc-400">
-                Allows admin uploads to be auto-committed directly to your GitHub repository so files persist permanently across Vercel deployments.
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Toggles */}
         <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 text-xs">
