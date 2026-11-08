@@ -81,7 +81,7 @@ export default function App() {
 
   const [settingsConfig, setSettingsConfig] = useState({
     k: 5,
-    useHybrid: false,
+    useHybrid: true,
     comparePlain: false,
     groqModel: 'qwen/qwen3.8-27b',
     llmModel: 'qwen/qwen3.8-27b',

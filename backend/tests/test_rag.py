@@ -93,6 +93,7 @@ def test_fastapi_stats_endpoint():
 
 def test_settings_admin_vs_guest():
     from fastapi.testclient import TestClient
+    from unittest.mock import patch
     from app.main import app
     from app.config import settings
 
@@ -113,16 +114,17 @@ def test_settings_admin_vs_guest():
         assert settings.DEFAULT_CHUNK_SIZE == orig_chunk_size
 
         # 2. Admin update: SHOULD modify global settings
-        admin_res = client.post(
-            "/api/settings",
-            json={"chunk_size": 320, "chunk_overlap": 40},
-            headers={"x-admin-password": "ci_test_admin_pw_1112"}
-        )
-        assert admin_res.status_code == 200
-        admin_data = admin_res.json()
-        assert admin_data["is_admin"] is True
-        assert admin_data["chunk_size"] == 320
-        assert settings.DEFAULT_CHUNK_SIZE == 320
+        with patch("app.api.routes.rag_engine.reindex_all", return_value={"status": "success", "message": "mocked"}):
+            admin_res = client.post(
+                "/api/settings",
+                json={"chunk_size": 320, "chunk_overlap": 40},
+                headers={"x-admin-password": "ci_test_admin_pw_1112"}
+            )
+            assert admin_res.status_code == 200
+            admin_data = admin_res.json()
+            assert admin_data["is_admin"] is True
+            assert admin_data["chunk_size"] == 320
+            assert settings.DEFAULT_CHUNK_SIZE == 320
     finally:
         # Restore defaults
         settings.DEFAULT_CHUNK_SIZE = orig_chunk_size

@@ -12,7 +12,7 @@ class ChunkHit(BaseModel):
 class QueryRequest(BaseModel):
     question: str = Field(..., example="What is precision?")
     k: int = Field(5, ge=1, le=20, description="Top-k chunks to retrieve")
-    use_hybrid: bool = Field(False, description="Combine semantic search with TF-IDF keyword search")
+    use_hybrid: bool = Field(True, description="Combine semantic search with TF-IDF keyword search")
     compare_plain: bool = Field(True, description="Also generate answer without RAG context for side-by-side comparison")
     model_name: Optional[str] = Field(None, description="Groq model identifier")
     session_id: Optional[str] = Field(None, description="Private guest session ID for temporary files")

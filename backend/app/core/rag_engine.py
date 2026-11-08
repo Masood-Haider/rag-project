@@ -67,7 +67,7 @@ class RAGEngine:
             "dimension": vector_store.dimension
         }
 
-    def retrieve_chunks(self, question: str, k: int = settings.DEFAULT_K, use_hybrid: bool = False, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def retrieve_chunks(self, question: str, k: int = settings.DEFAULT_K, use_hybrid: bool = True, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Retrieve chunks from permanent index and private guest session index (if any).
         """
@@ -172,7 +172,7 @@ class RAGEngine:
         except Exception as e:
             return f"[Groq Connection Error]: {str(e)}"
 
-    def query(self, question: str, k: int = settings.DEFAULT_K, use_hybrid: bool = False, compare_plain: bool = False, model_name: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
+    def query(self, question: str, k: int = settings.DEFAULT_K, use_hybrid: bool = True, compare_plain: bool = False, model_name: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Execute full RAG pipeline."""
         # Auto-index corpus if vector store is empty but documents exist
         if vector_store.total_vectors == 0:
@@ -205,7 +205,7 @@ class RAGEngine:
             "top_score": round(top_score, 4),
             "threshold": self.threshold,
             "is_low_confidence": is_low_confidence,
-            "warning": "Top score is below confidence threshold (0.40). The documents may not contain the answer." if is_low_confidence else None,
+            "warning": f"Top score is below confidence threshold ({self.threshold:.2f}). The documents may not contain the answer." if is_low_confidence else None,
             "retrieval_mode": "hybrid" if use_hybrid else "semantic_faiss",
             "model_used": active_model
         }

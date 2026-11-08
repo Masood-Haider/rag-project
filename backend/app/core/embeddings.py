@@ -99,9 +99,13 @@ class EmbeddingService:
             meaningful = [t for t in tokens if t not in stopwords]
             toks_to_use = meaningful if meaningful else tokens
             for tok in toks_to_use:
-                h = int(hashlib.md5(tok.encode("utf-8")).hexdigest()[:8], 16)
-                idx = h % self.dimension
-                vec[idx] += 1.0
+                b = tok.encode("utf-8")
+                h_raw = hashlib.sha256(b).digest()
+                for i in range(4):
+                    val = int.from_bytes(h_raw[i*4 : (i+1)*4], byteorder="big")
+                    idx = val % self.dimension
+                    sign = 1.0 if ((val >> 16) & 1) == 1 else -1.0
+                    vec[idx] += sign
             norm = np.linalg.norm(vec)
             if norm > 0:
                 vec /= norm
