@@ -22,16 +22,26 @@ export default function DocumentManager({
   const [inputPassword, setInputPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
+
+  // Delete modal state
+  const [docToDelete, setDocToDelete] = useState(null);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   
   const fileInputRef = useRef(null);
   const modalInputRef = useRef(null);
+  const deleteInputRef = useRef(null);
 
   // Prevent scroll & white-space jump when popup opens
   useEffect(() => {
-    if (showPasswordDialog) {
+    if (showPasswordDialog || docToDelete || showClearModal) {
       document.body.style.overflow = 'hidden';
       const timer = setTimeout(() => {
-        modalInputRef.current?.focus({ preventScroll: true });
+        if (showPasswordDialog) modalInputRef.current?.focus({ preventScroll: true });
+        if (docToDelete && docToDelete.is_permanent && !isAdmin) deleteInputRef.current?.focus({ preventScroll: true });
       }, 50);
       return () => {
         clearTimeout(timer);
@@ -40,20 +50,30 @@ export default function DocumentManager({
     } else {
       document.body.style.overflow = '';
     }
-  }, [showPasswordDialog]);
+  }, [showPasswordDialog, docToDelete, showClearModal, isAdmin]);
 
-  // Handle ESC key to close modal
+  // Handle ESC key to close modals
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && showPasswordDialog) {
-        setShowPasswordDialog(false);
-        setPasswordError('');
-        setInputPassword('');
+      if (e.key === 'Escape') {
+        if (showPasswordDialog) {
+          setShowPasswordDialog(false);
+          setPasswordError('');
+          setInputPassword('');
+        }
+        if (docToDelete) {
+          setDocToDelete(null);
+          setDeleteError('');
+          setDeletePassword('');
+        }
+        if (showClearModal) {
+          setShowClearModal(false);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showPasswordDialog]);
+  }, [showPasswordDialog, docToDelete, showClearModal]);
 
   const handleVerifyPassword = async (e) => {
     e.preventDefault();
@@ -173,37 +193,67 @@ export default function DocumentManager({
     }
   };
 
-  const handleDelete = async (doc) => {
-    if (doc.is_permanent && !isAdmin) {
-      alert("Only the administrator can delete permanent corpus documents.");
+  const handleDeleteClick = (doc) => {
+    setDocToDelete(doc);
+    setDeleteError('');
+    setDeletePassword(adminPassword || '');
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!docToDelete) return;
+
+    const pwToUse = deletePassword || adminPassword;
+    if (docToDelete.is_permanent && !pwToUse) {
+      setDeleteError('Admin password is required to delete permanent documents.');
       return;
     }
 
-    if (!confirm(`Remove ${doc.filename}?`)) return;
+    setIsDeleting(true);
+    setDeleteError('');
 
     try {
       const headers = { 'x-session-id': sessionId };
-      if (isAdmin && adminPassword) {
-        headers['x-admin-password'] = adminPassword;
+      if (pwToUse) {
+        headers['x-admin-password'] = pwToUse;
       }
 
-      const res = await fetch(`${apiUrl}/documents/${encodeURIComponent(doc.filename)}`, {
+      const res = await fetch(`${apiUrl}/documents/${encodeURIComponent(docToDelete.filename)}`, {
         method: 'DELETE',
         headers
       });
-      if (res.ok) {
-        onRefreshDocs();
-      } else {
-        const data = await res.json();
-        alert(data.detail || 'Failed to delete file.');
+
+      if (!res.ok) {
+        let errDetail = 'Failed to delete file.';
+        try {
+          const errData = await res.json();
+          errDetail = errData.detail || errDetail;
+        } catch (_) {}
+        setDeleteError(errDetail);
+        return;
       }
+
+      // If user unlocked with password, keep them logged in
+      if (pwToUse && !isAdmin) {
+        setIsAdmin(true);
+        setAdminPassword(pwToUse);
+      }
+
+      setDocToDelete(null);
+      setDeletePassword('');
+      setUploadMessage({
+        type: 'success',
+        text: `Successfully deleted ${docToDelete.filename}. Vector store re-indexed.`
+      });
+      onRefreshDocs();
     } catch (err) {
-      alert(`Delete error: ${err.message}`);
+      setDeleteError(`Network error: ${err.message}`);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  const handleClearSession = async () => {
-    if (!confirm("Clear all your temporary files from this session?")) return;
+  const handleConfirmClearSession = async () => {
+    setIsClearing(true);
     try {
       const formData = new FormData();
       formData.append('session_id', sessionId);
@@ -211,9 +261,19 @@ export default function DocumentManager({
         method: 'POST',
         body: formData
       });
+      setShowClearModal(false);
+      setUploadMessage({
+        type: 'success',
+        text: 'All temporary private sandbox files cleared.'
+      });
       onRefreshDocs();
-    } catch (e) {
-      console.error(e);
+    } catch (err) {
+      setUploadMessage({
+        type: 'error',
+        text: `Clear error: ${err.message}`
+      });
+    } finally {
+      setIsClearing(false);
     }
   };
 
@@ -408,7 +468,7 @@ export default function DocumentManager({
           <span>Available Documents ({documents.length})</span>
           {!isAdmin && documents.some(d => !d.is_permanent) && (
             <button
-              onClick={handleClearSession}
+              onClick={() => setShowClearModal(true)}
               className="text-[11px] text-rose-600 dark:text-rose-400 hover:underline"
             >
               Clear Temporary Files
@@ -449,14 +509,9 @@ export default function DocumentManager({
                 </div>
 
                 <button
-                  onClick={() => handleDelete(doc)}
-                  disabled={doc.is_permanent && !isAdmin}
-                  className={`p-1.5 rounded-md transition ${
-                    doc.is_permanent && !isAdmin
-                      ? 'text-zinc-300 dark:text-zinc-700 cursor-not-allowed'
-                      : 'text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400'
-                  }`}
-                  title={doc.is_permanent && !isAdmin ? "Only administrator can delete permanent files" : "Delete file"}
+                  onClick={() => handleDeleteClick(doc)}
+                  className="p-1.5 rounded-md transition text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                  title="Delete document"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -465,6 +520,147 @@ export default function DocumentManager({
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal (Portaled) */}
+      {docToDelete && createPortal(
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-xl max-w-sm w-full space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  Delete Document
+                </h3>
+              </div>
+              <button
+                onClick={() => setDocToDelete(null)}
+                className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200/80 dark:border-zinc-800 flex items-center gap-2.5">
+              <FileText className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                  {docToDelete.filename}
+                </p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[10px] text-zinc-500 font-mono">
+                    {docToDelete.size_kb} KB
+                  </span>
+                  <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                  <span className={`text-[10px] font-mono ${
+                    docToDelete.is_permanent
+                      ? 'text-zinc-500'
+                      : 'text-amber-600 dark:text-amber-400'
+                  }`}>
+                    {docToDelete.is_permanent ? 'Permanent Database' : 'Private Sandbox'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+              Are you sure you want to remove this document? The file will be removed from the knowledge base and the vector database will be re-indexed immediately.
+            </p>
+
+            {docToDelete.is_permanent && !isAdmin && (
+              <div className="space-y-1.5 pt-1">
+                <label className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-zinc-400" />
+                  <span>Admin Password (Required to delete permanent file)</span>
+                </label>
+                <input
+                  ref={deleteInputRef}
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Enter admin password (e.g. 1112)"
+                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md px-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-400"
+                />
+              </div>
+            )}
+
+            {deleteError && (
+              <div className="px-3 py-2 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-[11px] text-rose-700 dark:text-rose-300">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setDocToDelete(null)}
+                disabled={isDeleting}
+                className="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="px-3.5 py-1.5 rounded-md bg-rose-600 hover:bg-rose-500 text-white text-xs font-medium transition disabled:opacity-50 flex items-center gap-1"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Document'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Clear Session Modal (Portaled) */}
+      {showClearModal && createPortal(
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-xl max-w-sm w-full space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  Clear Private Sandbox
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowClearModal(false)}
+                className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+              All temporary documents uploaded during this session will be permanently deleted and your private sandbox will be cleared.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setShowClearModal(false)}
+                disabled={isClearing}
+                className="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmClearSession}
+                disabled={isClearing}
+                className="px-3.5 py-1.5 rounded-md bg-rose-600 hover:bg-rose-500 text-white text-xs font-medium transition disabled:opacity-50 flex items-center gap-1"
+              >
+                {isClearing ? 'Clearing...' : 'Clear Sandbox'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

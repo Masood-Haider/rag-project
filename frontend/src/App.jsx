@@ -14,9 +14,26 @@ export default function App() {
   const [isReindexing, setIsReindexing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Admin authentication state
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [adminPassword, setAdminPassword] = useState('');
+  // Admin authentication state (persisted across page refreshes in sessionStorage)
+  const [isAdmin, setIsAdmin] = useState(() => {
+    return sessionStorage.getItem('nexus_is_admin') === 'true';
+  });
+  const [adminPassword, setAdminPassword] = useState(() => {
+    return sessionStorage.getItem('nexus_admin_pw') || '';
+  });
+
+  const handleSetIsAdmin = (val) => {
+    setIsAdmin(val);
+    sessionStorage.setItem('nexus_is_admin', val ? 'true' : 'false');
+    if (!val) {
+      sessionStorage.removeItem('nexus_admin_pw');
+    }
+  };
+
+  const handleSetAdminPassword = (val) => {
+    setAdminPassword(val);
+    sessionStorage.setItem('nexus_admin_pw', val || '');
+  };
 
   // Guest session ID (unique per browser session, erased on exit)
   const [sessionId] = useState(() => {
@@ -174,9 +191,9 @@ export default function App() {
             apiUrl={API_BASE}
             sessionId={sessionId}
             isAdmin={isAdmin}
-            setIsAdmin={setIsAdmin}
+            setIsAdmin={handleSetIsAdmin}
             adminPassword={adminPassword}
-            setAdminPassword={setAdminPassword}
+            setAdminPassword={handleSetAdminPassword}
           />
         )}
       </main>

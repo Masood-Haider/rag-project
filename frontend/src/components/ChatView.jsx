@@ -90,11 +90,10 @@ export default function ChatView({ apiUrl, settingsConfig, sessionId }) {
   const [expandedChunksIdx, setExpandedChunksIdx] = useState(null);
 
   const quickQuestions = [
-    "What is precision?",
-    "What does top-k mean in retrieval?",
+    "Summarize the main topics in the uploaded documents",
+    "What are the key technical concepts and definitions?",
     "What accuracy did fine-tuning reach on SMS spam, and what is RAG?",
-    "What is the difference between classification and regression?",
-    "What is LangChain?"
+    "Explain the methodology and steps described in the documents"
   ];
 
   const handleSend = async (qToSend) => {

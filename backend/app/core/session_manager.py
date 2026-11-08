@@ -66,6 +66,12 @@ class SessionManager:
         """Retrieve chunks from the session's private index."""
         store = self.get_session_store(session_id)
         if store.total_vectors == 0:
+            corpus_dir = self.get_session_corpus_dir(session_id)
+            if any(corpus_dir.iterdir()):
+                self.reindex_session(session_id)
+                store = self.get_session_store(session_id)
+
+        if store.total_vectors == 0:
             return []
         q_vec = embedding_service.embed([question])
         return store.search(q_vec, k=k)

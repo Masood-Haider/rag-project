@@ -101,17 +101,29 @@ class RAGEngine:
             context += f"\n[Source {i}: {hit['source']}]\n{hit['chunk']}\n"
 
         prompt = (
-            "Answer the question using ONLY the context below. "
-            'If the answer is not in the context, say "I do not know". '
-            "Do not guess. Cite the source file for each fact you use.\n"
-            f"\nContext:{context}"
-            f"\nQuestion: {question}\nAnswer:"
+            "You are a knowledgeable RAG assistant. Answer the user's question accurately, thoroughly, and directly "
+            "based on the retrieved document context below.\n\n"
+            f"=== RETRIEVED CONTEXT ===\n{context}\n=========================\n\n"
+            f"Question: {question}\n\n"
+            "Instructions:\n"
+            "- Carefully explain the facts and concepts found in the retrieved context.\n"
+            "- Cite the source document for each key fact (e.g. [Source 1] or [filename]).\n"
+            "- If the context partially addresses the question, provide all relevant details available.\n"
+            "- If the question asks about something completely absent from the context, summarize what the documents actually discuss.\n\n"
+            "Answer:"
         )
         return prompt
 
-    def generate_llm_response(self, prompt: str, model_name: Optional[str] = None, temperature: float = settings.TEMPERATURE) -> str:
+    def generate_llm_response(
+        self,
+        prompt: str,
+        model_name: Optional[str] = None,
+        system_prompt: Optional[str] = None,
+        temperature: float = settings.TEMPERATURE
+    ) -> str:
         """Generate response exclusively using Groq API."""
         model = model_name or settings.GROQ_MODEL or "qwen/qwen3.8-27b"
+        sys_msg = system_prompt or "You are an intelligent knowledge base assistant. Answer questions thoroughly and accurately based on the provided context."
 
         if not settings.GROQ_API_KEY:
             return (
@@ -124,7 +136,7 @@ class RAGEngine:
             try:
                 chat_completion = self.groq_client.chat.completions.create(
                     messages=[
-                        {"role": "system", "content": "You are a grounded assistant. Strictly rely only on provided context."},
+                        {"role": "system", "content": sys_msg},
                         {"role": "user", "content": prompt}
                     ],
                     model=model,
@@ -145,7 +157,7 @@ class RAGEngine:
             payload = {
                 "model": model,
                 "messages": [
-                    {"role": "system", "content": "You are a grounded assistant. Strictly rely only on provided context."},
+                    {"role": "system", "content": sys_msg},
                     {"role": "user", "content": prompt}
                 ],
                 "temperature": temperature,
@@ -162,17 +174,25 @@ class RAGEngine:
 
     def query(self, question: str, k: int = settings.DEFAULT_K, use_hybrid: bool = False, compare_plain: bool = False, model_name: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Execute full RAG pipeline."""
+        # Auto-index corpus if vector store is empty but documents exist
+        if vector_store.total_vectors == 0:
+            docs = load_corpus(settings.CORPUS_DIR)
+            if docs:
+                self.reindex_all()
+
         hits = self.retrieve_chunks(question, k=k, use_hybrid=use_hybrid, session_id=session_id)
         
         top_score = hits[0]["score"] if hits else 0.0
         is_low_confidence = top_score < self.threshold
 
         augmented_prompt = self.build_prompt(question, hits)
-        answer_with_rag = self.generate_llm_response(augmented_prompt, model_name=model_name)
+        rag_sys_prompt = "You are a grounded RAG AI assistant. You answer questions thoroughly, accurately, and directly based on the provided document excerpts. Cite sources using [Source X]."
+        answer_with_rag = self.generate_llm_response(augmented_prompt, model_name=model_name, system_prompt=rag_sys_prompt)
 
         answer_without_rag = None
         if compare_plain:
-            answer_without_rag = self.generate_llm_response(question, model_name=model_name)
+            plain_sys_prompt = "You are a helpful AI assistant. Answer the user's question directly and informatively using your general knowledge."
+            answer_without_rag = self.generate_llm_response(question, model_name=model_name, system_prompt=plain_sys_prompt)
 
         active_model = model_name or settings.GROQ_MODEL
 

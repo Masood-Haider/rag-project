@@ -276,22 +276,25 @@ async def upload_documents(
 def delete_document(
     filename: str,
     x_admin_password: Optional[str] = Header(None),
-    x_session_id: Optional[str] = Header(None)
+    x_session_id: Optional[str] = Header(None),
+    admin_password: Optional[str] = None
 ):
-    # Check if file belongs to guest session first
+    actual_admin_pw = x_admin_password or admin_password
+
+    # 1. Check if file belongs to guest session first
     if x_session_id and session_manager.delete_session_file(x_session_id, filename):
         return {"status": "success", "message": f"Deleted temporary file {filename} from your session."}
 
-    # Permanent file deletion requires ADMIN_PASSWORD
-    if not _check_admin(x_admin_password):
+    # 2. Permanent file deletion requires ADMIN_PASSWORD
+    if not _check_admin(actual_admin_pw):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Permission denied. Only the administrator can delete permanent corpus documents."
+            detail="Incorrect admin password. Permanent documents can only be deleted with the admin password."
         )
 
     target = settings.CORPUS_DIR / filename
     if not target.exists() or not target.is_file():
-        raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(status_code=404, detail=f"File {filename} not found.")
 
     try:
         if target.exists():
@@ -299,7 +302,11 @@ def delete_document(
         if settings.GITHUB_TOKEN:
             _delete_from_github_repo(filename)
         reindex_result = rag_engine.reindex_all()
-        return {"status": "success", "message": f"Deleted permanent file {filename}.", "reindex_result": reindex_result}
+        return {
+            "status": "success",
+            "message": f"Successfully deleted {filename} from permanent knowledge base.",
+            "reindex_result": reindex_result
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete file: {e}")
 
